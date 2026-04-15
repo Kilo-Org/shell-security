@@ -1,11 +1,10 @@
 {
   "name": "@kilocode/openclaw-security-advisor",
-  "version": "0.1.0",
+  "version": "0.1.0-dev.1",
   "type": "module",
   "license": "MIT",
   "description": "Security analysis plugin for OpenClaw instances, powered by KiloCode",
   "//": "private: true is intentional — safety net against accidental `npm publish`. The publish script (script/publish.ts) strips this flag before packing and restores it after. Do NOT remove this without also having the publish pipeline in place.",
-  "private": true,
   "main": "index.ts",
   "openclaw": {
     "extensions": [
