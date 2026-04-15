@@ -1,17 +1,22 @@
 name: publish
-run-name: "${{ format('{0} {1}', inputs.channel || (inputs.pre_release && 'rc' || 'latest'), inputs.version || inputs.bump) }}"
+run-name: "${{ format('{0} {1}', inputs.channel || 'latest', inputs.version || inputs.bump || 'auto') }}"
 
 on:
-  # Automated releases are intentionally disabled.
   # Releases are manual only — trigger via workflow_dispatch.
-  #
-  # push:
-  #   branches:
-  #     - main
+  # Both "latest" and "dev" channels are dispatched by hand. There is
+  # no auto-publish on push.
   workflow_dispatch:
     inputs:
+      channel:
+        description: 'npm dist-tag channel — "latest" (public stable) or "dev" (internal)'
+        required: true
+        type: choice
+        default: latest
+        options:
+          - latest
+          - dev
       bump:
-        description: "Bump major, minor, or patch"
+        description: "Bump major/minor/patch — for latest, bumps stable; for dev, resets dev cycle"
         required: false
         type: choice
         options:
@@ -20,25 +25,11 @@ on:
           - minor
           - major
       version:
-        description: "Override version (optional, takes precedence over bump)"
+        description: "Override version (X.Y.Z for latest, X.Y.Z-dev.N for dev). Wins over bump."
         required: false
         type: string
-      channel:
-        description: "npm dist-tag channel (explicit; wins over pre_release)"
-        required: false
-        type: choice
-        options:
-          - ""
-          - latest
-          - rc
-          - beta
-      pre_release:
-        description: "Publish to rc channel (ignored when channel is set)"
-        required: false
-        type: boolean
-        default: false
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump }}
+concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.channel }}-${{ inputs.version || inputs.bump }}
 
 # id-token:write is required for npm provenance (SLSA attestation).
 # This workflow must run on GitHub-hosted runners (not Blacksmith) for
@@ -78,14 +69,21 @@ jobs:
       - name: Format check
         run: bun run format:check
 
+      # Fail fast on bad/missing NPM_TOKEN before any side effects
+      # (version.ts writes to package.json, network calls to GH, etc.)
+      # Surfaces auth issues in ~2s instead of mid-publish.
+      - name: Verify npm auth
+        run: npm whoami --registry=https://registry.npmjs.org/
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Resolve version
         id: version
         run: bun script/version.ts
         env:
+          KILO_CHANNEL: ${{ inputs.channel }}
           KILO_BUMP: ${{ inputs.bump }}
           KILO_VERSION: ${{ inputs.version }}
-          KILO_CHANNEL: ${{ inputs.channel }}
-          KILO_PRE_RELEASE: ${{ inputs.pre_release && 'true' || 'false' }}
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
 
@@ -96,17 +94,71 @@ jobs:
           NPM_CONFIG_PROVENANCE: "true"
           KILO_CHANNEL: ${{ steps.version.outputs.channel }}
 
-      - name: Commit version bump and tag
+      # Smoke test: confirm the version actually appeared on the npm
+      # registry. `npm publish` has been known to report success while
+      # the registry's eventual-consistency layer drops the new version
+      # (rare, but real). Catching this here means we fail BEFORE
+      # creating tags / GH releases that would point at a non-existent
+      # version. Retries 3x with 5s backoff to absorb normal replication
+      # lag.
+      - name: Verify publish landed on registry
         env:
-          TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          MAX_ATTEMPTS=3
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            PUBLISHED=$(npm view "@kilocode/openclaw-security-advisor@$VERSION" version 2>/dev/null || echo "")
+            if [ "$PUBLISHED" = "$VERSION" ]; then
+              echo "Verified: $VERSION is live on npm"
+              exit 0
+            fi
+            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
+              echo "Attempt $i/$MAX_ATTEMPTS: registry returned '$PUBLISHED', expected '$VERSION'. Retrying in 5s..."
+              sleep 5
+            else
+              echo "Attempt $i/$MAX_ATTEMPTS: registry returned '$PUBLISHED', expected '$VERSION'."
+            fi
+          done
+          echo "::error::npm publish reported success but $VERSION did not appear on the registry after $MAX_ATTEMPTS attempts"
+          exit 1
+
+      - name: Configure git identity
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Stable releases get the version bump committed back to main so
+      # package.json on main always reflects the latest published stable.
+      # Dev releases skip this: dev publishes are ephemeral and would
+      # otherwise pollute main with snapshot commits.
+      - name: Commit version bump (stable only)
+        if: steps.version.outputs.channel == 'latest'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
           git add package.json
           git commit -m "release: $TAG"
+          git push origin HEAD
+
+      # Tag is created for both channels so future `gh release list`
+      # queries can find the highest dev version. For dev releases the
+      # tag points at an orphan commit (the package.json bump made in
+      # this CI runner) — pushing the tag carries the orphan commit too.
+      - name: Tag release
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          CHANNEL: ${{ steps.version.outputs.channel }}
+        run: |
+          # For dev, we haven't committed the bump yet — do it now so the
+          # tag points at the bumped tree. version.ts is guaranteed to
+          # have modified package.json before this step runs, so this
+          # commit always has changes (no --allow-empty needed).
+          if [ "$CHANNEL" = "dev" ]; then
+            git add package.json
+            git commit -m "release: $TAG"
+          fi
           git tag "$TAG"
-          git push origin HEAD --tags
+          git push origin "$TAG"
 
       - name: Create GitHub release
         env:

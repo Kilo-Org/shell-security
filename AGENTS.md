@@ -49,27 +49,48 @@ the published tarball.
 ## Release flow
 
 Releases are triggered manually from GitHub Actions → `publish` workflow →
-"Run workflow". Two common paths:
+"Run workflow". Two channels exist and they map to npm dist-tags:
 
-- **Explicit version (today's path)**: dispatch with `version=0.1.0-beta.2`,
-  `channel=beta`, leave bump blank. Use this for pre-release / beta / rc cuts.
-- **Auto-bump stable**: dispatch with `bump=patch|minor|major`, leave version
-  blank, leave channel blank. CI queries the highest existing `vX.Y.Z` tag on
-  the repo, bumps it, publishes to the `latest` npm dist-tag.
+- **`latest`** — public stable releases (`X.Y.Z`). Default for `npm install`.
+- **`dev`** — internal dogfood snapshots (`X.Y.Z-dev.N`). Available via
+  `npm install @kilocode/openclaw-security-advisor@dev`.
 
-`script/version.ts` handles both. See the top-of-file docstring for full env
-var semantics. The workflow fails fast if the target tag already exists on
-GitHub.
+There is no `beta`, `rc`, `next`, or `canary`. Two channels, that's it.
+
+Common dispatch paths:
+
+- **Auto-bump stable**: `channel=latest`, `bump=patch|minor|major`. Queries
+  the highest existing `vX.Y.Z` tag, bumps it, publishes to `latest`.
+- **Continue dev cycle**: `channel=dev`, leave bump and version blank.
+  Increments the dev counter on the highest existing `*-dev.N` tag.
+- **Reset dev cycle**: `channel=dev`, `bump=minor` (or major/patch). Seeds
+  `${next-stable}-dev.1`. Use after shipping a stable release to start
+  the next dev cycle.
+- **Explicit version**: any channel, `version=X.Y.Z` or `X.Y.Z-dev.N`.
+  Wins over bump.
+
+`script/version.ts` handles all of the above. See the top-of-file docstring
+for full env var semantics. The workflow fails fast if the target tag
+already exists on GitHub.
+
+For full step-by-step release instructions see [RELEASING.md](./RELEASING.md).
 
 ### Branch protection and the release commit
 
-The publish workflow's final step pushes a `release: vX.Y.Z` commit + tag
-directly to `main` as `github-actions[bot]`, using the default `GITHUB_TOKEN`.
+The publish workflow pushes commits and/or tags to `main` as
+`github-actions[bot]`, using the default `GITHUB_TOKEN`.
+
+- **Stable releases** (`channel=latest`) commit the `package.json` version
+  bump back to `main` AND push the tag.
+- **Dev releases** (`channel=dev`) push only the tag (pointing at an
+  orphan commit). `main` history stays clean.
 
 Once branch protection / repository rulesets are enabled on `main`, the
 `github-actions[bot]` actor **must be added to the ruleset's bypass actors
-list**, otherwise the release workflow will fail at the push step _after_
+list**, otherwise stable releases will fail at the push step _after_
 `npm publish` has already succeeded — leaving npm and GitHub out of sync.
+Dev releases are less affected (no commit to `main`) but still need tag
+push to be allowed, which most rulesets permit by default.
 
 This is a stopgap. The long-term plan is to adopt the same `kilo-maintainer`
 GitHub App pattern used by the kilocode monorepo

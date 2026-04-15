@@ -3,20 +3,32 @@
 /**
  * Version resolution for @kilocode/openclaw-security-advisor.
  *
- * Mirrors the kilocode CLI's @opencode-ai/script pattern
- * (see kilocode/node_modules/@opencode-ai/script/src/index.ts for the
- * reference implementation this file was adapted from).
- *
- * Intentionally duplicated — this repo has no cross-repo dependency on
- * the kilocode monorepo. If you change version/channel semantics in
- * either repo, cross-check by hand so the two stay in sync.
+ * Two channels only:
+ *   - `latest` — public stable releases. Versions are plain semver: 1.2.3.
+ *   - `dev`    — internal dogfood snapshots. Versions are 1.2.3-dev.N
+ *                where N is a monotonically increasing counter per (X.Y.Z).
  *
  * Inputs (env vars):
- *   KILO_CHANNEL      — explicit channel (e.g. "latest", "rc", "beta"). Wins over everything.
- *   KILO_PRE_RELEASE  — "true" → channel defaults to "rc" when KILO_CHANNEL is not set.
- *   KILO_BUMP         — "major" | "minor" | "patch". How to bump the highest known version.
- *   KILO_VERSION      — explicit version override (e.g. "1.2.3"). Wins over KILO_BUMP.
- *   GH_REPO           — "owner/repo" slug. Used to query gh releases for the highest version.
+ *   KILO_CHANNEL  — "latest" | "dev". Defaults to "latest" when unset.
+ *   KILO_BUMP     — "major" | "minor" | "patch". Optional.
+ *   KILO_VERSION  — explicit version override. Wins over KILO_BUMP.
+ *   GH_REPO       — "owner/repo" slug. Used to query gh releases.
+ *
+ * Stable (`channel=latest`):
+ *   - Explicit KILO_VERSION wins.
+ *   - Otherwise, query the highest existing stable tag (vX.Y.Z, no
+ *     prerelease suffix) and bump it per KILO_BUMP (default: patch).
+ *
+ * Dev (`channel=dev`):
+ *   - Explicit KILO_VERSION wins (must look like X.Y.Z-dev.N).
+ *   - With KILO_BUMP: resets the dev cycle. Computes the next stable
+ *     (highest stable + bump) and seeds it as ${next}-dev.1. Use this
+ *     when starting a new dev cycle for the next major/minor/patch.
+ *   - Without KILO_BUMP: queries the highest existing dev tag and
+ *     increments its dev counter. Default workflow for "publish another
+ *     snapshot in the current cycle."
+ *   - First-ever dev cut (no prior dev tags): seeds at
+ *     ${highest stable + 1 patch}-dev.1.
  *
  * Outputs (written to $GITHUB_OUTPUT when available):
  *   version, tag, channel, preview
@@ -26,7 +38,13 @@
  *   - Throws if a release with the target tag already exists on GH_REPO.
  *
  * Local preview:
- *   KILO_VERSION=0.1.0-beta.1 KILO_CHANNEL=beta bun script/version.ts
+ *   KILO_CHANNEL=dev bun script/version.ts
+ *   KILO_CHANNEL=latest KILO_BUMP=minor bun script/version.ts
+ *
+ * NB: intentionally inlined from the kilocode CLI's @opencode-ai/script
+ * pattern (see kilocode/node_modules/@opencode-ai/script/src/index.ts).
+ * No cross-repo dependency. Cross-check by hand if either repo's
+ * version semantics change.
  */
 
 import { $ } from "bun";
@@ -37,26 +55,34 @@ const env = {
   KILO_CHANNEL: process.env.KILO_CHANNEL,
   KILO_BUMP: process.env.KILO_BUMP,
   KILO_VERSION: process.env.KILO_VERSION,
-  KILO_PRE_RELEASE: process.env.KILO_PRE_RELEASE,
   GH_REPO: process.env.GH_REPO,
 };
 
 const CHANNEL = (() => {
-  if (env.KILO_CHANNEL) return env.KILO_CHANNEL;
-  if (env.KILO_PRE_RELEASE === "true") return "rc";
-  return "latest";
+  if (!env.KILO_CHANNEL) return "latest";
+  if (env.KILO_CHANNEL !== "latest" && env.KILO_CHANNEL !== "dev") {
+    throw new Error(
+      `KILO_CHANNEL must be "latest" or "dev", got: ${env.KILO_CHANNEL}`,
+    );
+  }
+  return env.KILO_CHANNEL;
 })();
 
-const IS_PREVIEW = CHANNEL !== "latest";
+const IS_DEV = CHANNEL === "dev";
 
-type ParsedVersion = {
+type StableVersion = {
   major: number;
   minor: number;
   patch: number;
-  value: string;
+  value: string; // "X.Y.Z"
 };
 
-function parseVersion(input: string): ParsedVersion | undefined {
+type DevVersion = StableVersion & {
+  dev: number;
+  // value override: "X.Y.Z-dev.N"
+};
+
+function parseStable(input: string): StableVersion | undefined {
   const match = input.trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/);
   if (!match) return undefined;
   return {
@@ -67,85 +93,179 @@ function parseVersion(input: string): ParsedVersion | undefined {
   };
 }
 
-function compareVersion(a: ParsedVersion, b: ParsedVersion): number {
+function parseDev(input: string): DevVersion | undefined {
+  const match = input.trim().match(/^v?(\d+)\.(\d+)\.(\d+)-dev\.(\d+)$/);
+  if (!match) return undefined;
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    dev: Number(match[4]),
+    value: `${match[1]}.${match[2]}.${match[3]}-dev.${match[4]}`,
+  };
+}
+
+function compareStable(a: StableVersion, b: StableVersion): number {
   if (a.major !== b.major) return a.major - b.major;
   if (a.minor !== b.minor) return a.minor - b.minor;
   return a.patch - b.patch;
 }
 
-async function fetchLatestFromNpm(): Promise<string> {
-  try {
-    const res = await fetch(`https://registry.npmjs.org/${NPM_PACKAGE}/latest`);
-    if (!res.ok) throw new Error(`npm registry returned ${res.status}`);
-    const data = (await res.json()) as { version: string };
-    return data.version;
-  } catch {
-    // Package not yet published. Seed at 0.0.0 so the first patch bump
-    // lands at 0.0.1 (or whatever bump type was requested).
-    return "0.0.0";
-  }
+function compareDev(a: DevVersion, b: DevVersion): number {
+  const baseDelta = compareStable(a, b);
+  if (baseDelta !== 0) return baseDelta;
+  return a.dev - b.dev;
 }
 
-async function fetchHighestKnown(): Promise<string> {
-  if (!env.GH_REPO) return fetchLatestFromNpm();
+// Memoized so dev-resolution paths that need both the highest dev tag
+// AND the highest stable tag (e.g. first-ever dev cut) only hit the
+// GitHub API once instead of twice.
+let cachedTags: string[] | undefined;
+async function fetchAllTags(): Promise<string[]> {
+  if (cachedTags !== undefined) return cachedTags;
+  if (!env.GH_REPO) {
+    cachedTags = [];
+    return cachedTags;
+  }
   try {
     const result =
       await $`gh release list --json tagName --limit 100 --repo ${env.GH_REPO}`.json();
     const releases = result as { tagName: string }[];
-    const versions = releases.flatMap((item) => {
-      const v = parseVersion(item.tagName);
-      return v ? [v] : [];
-    });
-    const highest = versions.sort(compareVersion).at(-1);
-    if (highest) return highest.value;
+    cachedTags = releases.map((r) => r.tagName);
   } catch {
-    // gh not installed, unauthed, or no releases yet. Fall through.
+    // gh not installed, unauthed, or no releases yet.
+    cachedTags = [];
   }
-  return fetchLatestFromNpm();
+  return cachedTags;
 }
 
-function bumpVersion(current: string, type: string): string {
-  const v = parseVersion(current);
-  if (!v) throw new Error(`Cannot bump invalid version: ${current}`);
+async function fetchHighestStable(): Promise<StableVersion | undefined> {
+  const tags = await fetchAllTags();
+  const stables = tags.flatMap((t) => {
+    const v = parseStable(t);
+    return v ? [v] : [];
+  });
+  return stables.sort(compareStable).at(-1);
+}
+
+async function fetchHighestDev(): Promise<DevVersion | undefined> {
+  const tags = await fetchAllTags();
+  const devs = tags.flatMap((t) => {
+    const v = parseDev(t);
+    return v ? [v] : [];
+  });
+  return devs.sort(compareDev).at(-1);
+}
+
+async function fetchLatestStableFromNpm(): Promise<StableVersion> {
+  try {
+    const res = await fetch(`https://registry.npmjs.org/${NPM_PACKAGE}/latest`);
+    if (!res.ok) throw new Error(`npm registry returned ${res.status}`);
+    const data = (await res.json()) as { version: string };
+    const parsed = parseStable(data.version);
+    if (parsed) return parsed;
+  } catch {
+    // Package not yet published or registry unreachable.
+  }
+  // Seed at 0.0.0 so the first patch bump lands at 0.0.1.
+  return { major: 0, minor: 0, patch: 0, value: "0.0.0" };
+}
+
+function bumpStable(current: StableVersion, type: string): StableVersion {
   const kind = type.toLowerCase();
-  if (kind === "major") return `${v.major + 1}.0.0`;
-  if (kind === "minor") return `${v.major}.${v.minor + 1}.0`;
-  if (kind === "patch") return `${v.major}.${v.minor}.${v.patch + 1}`;
+  if (kind === "major") {
+    return {
+      major: current.major + 1,
+      minor: 0,
+      patch: 0,
+      value: `${current.major + 1}.0.0`,
+    };
+  }
+  if (kind === "minor") {
+    return {
+      major: current.major,
+      minor: current.minor + 1,
+      patch: 0,
+      value: `${current.major}.${current.minor + 1}.0`,
+    };
+  }
+  if (kind === "patch") {
+    return {
+      major: current.major,
+      minor: current.minor,
+      patch: current.patch + 1,
+      value: `${current.major}.${current.minor}.${current.patch + 1}`,
+    };
+  }
   throw new Error(
     `Unknown bump type: ${type} (expected major | minor | patch)`,
   );
 }
 
-function timestampSnapshot(channel: string): string {
-  const ts = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-  return `0.0.0-${channel}-${ts}`;
+function devToString(v: {
+  major: number;
+  minor: number;
+  patch: number;
+  dev: number;
+}): string {
+  return `${v.major}.${v.minor}.${v.patch}-dev.${v.dev}`;
+}
+
+async function resolveStableVersion(): Promise<string> {
+  const current =
+    (await fetchHighestStable()) ?? (await fetchLatestStableFromNpm());
+  const bumped = bumpStable(current, env.KILO_BUMP ?? "patch");
+  return bumped.value;
+}
+
+async function resolveDevVersion(): Promise<string> {
+  if (env.KILO_BUMP) {
+    // Reset dev cycle: seed next ${bump}.dev.1 from highest stable.
+    const stable =
+      (await fetchHighestStable()) ?? (await fetchLatestStableFromNpm());
+    const next = bumpStable(stable, env.KILO_BUMP);
+    return devToString({ ...next, dev: 1 });
+  }
+  // Continue dev cycle: increment counter on highest existing dev.
+  const highestDev = await fetchHighestDev();
+  if (highestDev) {
+    return devToString({ ...highestDev, dev: highestDev.dev + 1 });
+  }
+  // First-ever dev cut: seed at next-patch-from-stable, dev.1.
+  const stable =
+    (await fetchHighestStable()) ?? (await fetchLatestStableFromNpm());
+  const next = bumpStable(stable, "patch");
+  return devToString({ ...next, dev: 1 });
 }
 
 const VERSION: string = await (async () => {
   if (env.KILO_VERSION) {
-    // Accept either plain semver or prerelease semver (e.g. 0.1.0-beta.1).
     const trimmed = env.KILO_VERSION.trim().replace(/^v/, "");
-    if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(trimmed)) {
-      throw new Error(`KILO_VERSION is not valid semver: ${env.KILO_VERSION}`);
+    // Validate: must be plain semver for latest, or X.Y.Z-dev.N for dev.
+    if (CHANNEL === "latest") {
+      if (!parseStable(trimmed)) {
+        throw new Error(
+          `KILO_VERSION must be plain semver (X.Y.Z) for channel=latest, got: ${env.KILO_VERSION}`,
+        );
+      }
+    } else {
+      if (!parseDev(trimmed)) {
+        throw new Error(
+          `KILO_VERSION must look like X.Y.Z-dev.N for channel=dev, got: ${env.KILO_VERSION}`,
+        );
+      }
     }
     return trimmed;
   }
-  if (IS_PREVIEW) {
-    if (env.KILO_BUMP) {
-      const current = await fetchHighestKnown();
-      return bumpVersion(current, env.KILO_BUMP);
-    }
-    return timestampSnapshot(CHANNEL);
-  }
-  const current = await fetchHighestKnown();
-  return bumpVersion(current, env.KILO_BUMP ?? "patch");
+  return CHANNEL === "latest"
+    ? await resolveStableVersion()
+    : await resolveDevVersion();
 })();
 
 const TAG = `v${VERSION}`;
 
 // Guard against double-publishing: fail fast if a release with this tag
-// already exists on the target repo. This covers both stable and preview
-// channels. Skipped when GH_REPO is unset (local preview).
+// already exists on the target repo. Skipped when GH_REPO is unset.
 if (env.GH_REPO) {
   const existing = await $`gh release view ${TAG} --repo ${env.GH_REPO}`
     .nothrow()
@@ -169,7 +289,7 @@ const outputs = [
   `version=${VERSION}`,
   `tag=${TAG}`,
   `channel=${CHANNEL}`,
-  `preview=${IS_PREVIEW}`,
+  `preview=${IS_DEV}`,
 ];
 
 if (process.env.GITHUB_OUTPUT) {
@@ -184,7 +304,7 @@ if (process.env.GITHUB_OUTPUT) {
 
 console.log(
   JSON.stringify(
-    { version: VERSION, tag: TAG, channel: CHANNEL, preview: IS_PREVIEW },
+    { version: VERSION, tag: TAG, channel: CHANNEL, preview: IS_DEV },
     null,
     2,
   ),

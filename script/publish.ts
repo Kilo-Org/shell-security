@@ -3,10 +3,8 @@
 /**
  * Publish script for @kilocode/openclaw-security-advisor.
  *
- * Channel resolution (matches script/version.ts):
- *   KILO_CHANNEL=<x>      → explicit channel wins (e.g. "beta", "rc", "latest")
- *   KILO_PRE_RELEASE=true → "rc" when KILO_CHANNEL unset
- *   default               → "latest"
+ * Reads the channel from KILO_CHANNEL ("latest" | "dev"); defaults to
+ * "latest". Channel resolution must stay in sync with script/version.ts.
  *
  * The version itself is NOT computed here — it's already been written
  * into package.json by script/version.ts in an earlier workflow step.
@@ -22,18 +20,18 @@ import { fileURLToPath } from "url";
 const dir = fileURLToPath(new URL("..", import.meta.url));
 process.chdir(dir);
 
-const channel = (() => {
-  if (process.env.KILO_CHANNEL) return process.env.KILO_CHANNEL;
-  if (process.env.KILO_PRE_RELEASE === "true") return "rc";
-  return "latest";
-})();
-
-console.log(
-  `Publishing @kilocode/openclaw-security-advisor → channel: ${channel}`,
-);
+const channel = process.env.KILO_CHANNEL || "latest";
+if (channel !== "latest" && channel !== "dev") {
+  throw new Error(`KILO_CHANNEL must be "latest" or "dev", got: ${channel}`);
+}
 
 const raw = await Bun.file("package.json").text();
 const pkg = JSON.parse(raw);
+
+console.log(
+  `Publishing @kilocode/openclaw-security-advisor@${pkg.version} → channel: ${channel}`,
+);
+
 const original = JSON.stringify(pkg, null, 2) + "\n";
 
 // Strip private flag so npm allows publishing.
