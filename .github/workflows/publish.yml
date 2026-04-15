@@ -87,90 +87,349 @@ jobs:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
 
+      # ============================================================
+      # POINT OF NO RETURN
+      # ============================================================
+      # `npm publish` is irreversible. Once it succeeds, every step
+      # below this point MUST eventually succeed (with retries) or the
+      # workflow exits via the recovery handler with explicit manual
+      # recovery instructions.
+      #
+      # Atomicity story:
+      # - All pre-publish validation runs above (token, version, no
+      #   existing tag/release per version.ts).
+      # - Publish runs once. If it fails, no git/GH side effects.
+      # - Verification of publish-landed is INFORMATIONAL ONLY. It uses
+      #   the registry HTTP endpoint (faster than `npm view`) and never
+      #   fails the workflow regardless of outcome.
+      # - Tag + release operations are bundled into a single step with
+      #   internal retries. If anything fails after retries, the
+      #   recovery handler prints the exact manual recovery commands.
+      # ============================================================
+
       - name: Publish to npm
+        id: publish
         run: bun script/publish.ts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
           KILO_CHANNEL: ${{ steps.version.outputs.channel }}
 
-      # Smoke test: confirm the version actually appeared on the npm
-      # registry. `npm publish` has been known to report success while
-      # the registry's eventual-consistency layer drops the new version
-      # (rare, but real). Catching this here means we fail BEFORE
-      # creating tags / GH releases that would point at a non-existent
-      # version. Retries 3x with 5s backoff to absorb normal replication
-      # lag.
-      - name: Verify publish landed on registry
+      # Informational verification of the publish landing on the npm
+      # registry. Uses curl against the registry HTTP endpoint (not
+      # `npm view`, which has 30-90s propagation lag). Polls 6 times at
+      # 10s intervals. ALWAYS exits 0 — this step never fails the
+      # workflow. The publish step itself is the source of truth for
+      # whether the publish actually happened.
+      - name: Verify publish landed (informational)
+        if: steps.publish.outcome == 'success'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          MAX_ATTEMPTS=3
-          for i in $(seq 1 $MAX_ATTEMPTS); do
-            PUBLISHED=$(npm view "@kilocode/openclaw-security-advisor@$VERSION" version 2>/dev/null || echo "")
-            if [ "$PUBLISHED" = "$VERSION" ]; then
-              echo "Verified: $VERSION is live on npm"
+          echo "Probing registry for @kilocode/openclaw-security-advisor@$VERSION..."
+          for i in 1 2 3 4 5 6; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "https://registry.npmjs.org/@kilocode/openclaw-security-advisor/$VERSION")
+            if [ "$STATUS" = "200" ]; then
+              echo "::notice::Verified $VERSION is live on the registry"
               exit 0
             fi
-            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
-              echo "Attempt $i/$MAX_ATTEMPTS: registry returned '$PUBLISHED', expected '$VERSION'. Retrying in 5s..."
+            echo "  Attempt $i/6: registry returned HTTP $STATUS, retrying in 10s..."
+            sleep 10
+          done
+          echo "::warning::Could not verify $VERSION on the registry after 60s of polling. The publish step itself reported success; verification is informational only and the workflow will continue to the tag/release steps."
+          exit 0
+
+      # Reconcile npm dist-tags.latest after a dev publish. On the very
+      # first publish of a new package, npm auto-assigns `latest` to
+      # whatever version was published, regardless of `--tag dev`. That
+      # leaves end users running plain `npm install <pkg>` getting a
+      # prerelease, which trips OpenClaw's prerelease guard with a
+      # confusing error.
+      #
+      # This step runs ONLY for dev-channel publishes, and ONLY when
+      # `latest` currently points at a prerelease version. It tries to
+      # repoint `latest` to the highest existing stable. If no stable
+      # exists yet (the pre-stable phase, i.e. before the first
+      # `channel=latest` release), it emits a warning and exits 0.
+      #
+      # Like the verify step above, this is INFORMATIONAL only —
+      # it never fails the workflow and never blocks tag/release.
+      - name: Reconcile latest dist-tag (dev publishes)
+        if: steps.publish.outcome == 'success' && steps.version.outputs.channel == 'dev'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          PKG="@kilocode/openclaw-security-advisor"
+
+          # Read dist-tags via the registry HTTP endpoint (faster
+          # propagation than `npm view` which has a separate cache layer
+          # and can return stale data for 30-90s after a publish).
+          # Retry up to 3x with 5s backoff in case the dist-tags entry
+          # itself hasn't propagated yet.
+          fetch_latest_dist_tag() {
+            curl -s "https://registry.npmjs.org/-/package/$PKG/dist-tags" 2>/dev/null | node -e '
+              let s = "";
+              process.stdin.on("data", d => s += d);
+              process.stdin.on("end", () => {
+                try { console.log(JSON.parse(s).latest || ""); }
+                catch { console.log(""); }
+              });
+            ' || echo ""
+          }
+
+          LATEST=""
+          for attempt in 1 2 3; do
+            LATEST=$(fetch_latest_dist_tag)
+            if [ -n "$LATEST" ]; then
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "  dist-tags query attempt $attempt/3 returned empty, retrying in 5s..."
               sleep 5
-            else
-              echo "Attempt $i/$MAX_ATTEMPTS: registry returned '$PUBLISHED', expected '$VERSION'."
             fi
           done
-          echo "::error::npm publish reported success but $VERSION did not appear on the registry after $MAX_ATTEMPTS attempts"
-          exit 1
+          echo "Current dist-tags.latest: ${LATEST:-<unset>}"
+
+          # If `latest` is empty or already a stable version (no `-`),
+          # there's nothing to reconcile.
+          case "$LATEST" in
+            "")
+              echo "::notice::dist-tags.latest is unset; nothing to reconcile"
+              exit 0
+              ;;
+            *-*)
+              : # prerelease — fall through to reconciliation
+              ;;
+            *)
+              echo "::notice::dist-tags.latest is already a stable version ($LATEST); nothing to reconcile"
+              exit 0
+              ;;
+          esac
+
+          # Find the highest stable version on the registry. Handles
+          # both shapes of `npm view ... versions --json`: a string for
+          # single-version packages, an array for multi-version.
+          HIGHEST_STABLE=$(npm view "$PKG" versions --json 2>/dev/null | node -e '
+            let s = "";
+            process.stdin.on("data", d => s += d);
+            process.stdin.on("end", () => {
+              try {
+                const data = JSON.parse(s);
+                const arr = Array.isArray(data) ? data : [data];
+                const stable = arr.filter(x => typeof x === "string" && !x.includes("-"));
+                if (!stable.length) process.exit(42);
+                stable.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+                console.log(stable[stable.length - 1]);
+              } catch {
+                process.exit(43);
+              }
+            });
+          ') || HIGHEST_STABLE=""
+
+          if [ -z "$HIGHEST_STABLE" ]; then
+            echo "::warning::No stable version of $PKG exists on the registry yet. npm auto-assigned dist-tags.latest to the just-published dev version ($LATEST) because --tag dev alone cannot prevent it on a first publish. Users must opt in to the dev channel explicitly: 'openclaw plugins install $PKG@dev' or 'npm install $PKG@dev'. This is expected and non-fatal until the first stable (channel=latest) release ships, at which point this step will repoint latest automatically."
+            exit 0
+          fi
+
+          echo "Highest stable on registry: $HIGHEST_STABLE — repointing latest..."
+          for i in 1 2 3; do
+            if npm dist-tag add "$PKG@$HIGHEST_STABLE" latest; then
+              echo "::notice::Repointed dist-tags.latest from $LATEST to $HIGHEST_STABLE"
+              exit 0
+            fi
+            if [ "$i" -lt 3 ]; then
+              echo "  attempt $i/3 failed, retrying in 5s..."
+              sleep 5
+            fi
+          done
+          echo "::warning::Failed to repoint dist-tags.latest to $HIGHEST_STABLE after 3 attempts. Manual fix: npm dist-tag add $PKG@$HIGHEST_STABLE latest"
+          exit 0
 
       - name: Configure git identity
+        if: steps.publish.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      # Stable releases get the version bump committed back to main so
-      # package.json on main always reflects the latest published stable.
-      # Dev releases skip this: dev publishes are ephemeral and would
-      # otherwise pollute main with snapshot commits.
-      - name: Commit version bump (stable only)
-        if: steps.version.outputs.channel == 'latest'
+      # Atomic git/GH operations bundled into ONE step:
+      # 1. Build the local commit (on main for stable, on detached HEAD for dev)
+      # 2. Build the local tag
+      # 3. Push refs in a SINGLE git push transaction
+      #    - stable: `git push origin HEAD --follow-tags` (commit + tag in one call)
+      #    - dev:    `git push origin <tag>` (the orphan commit travels with the tag)
+      # 4. Create the GH release
+      #
+      # All network operations have internal 3x retries with 5s backoff.
+      # If anything fails after retries, the next step prints recovery
+      # instructions.
+      - name: Tag and release (post-publish)
+        id: tag_and_release
+        if: steps.publish.outcome == 'success'
         env:
           TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          git add package.json
-          git commit -m "release: $TAG"
-          git push origin HEAD
-
-      # Tag is created for both channels so future `gh release list`
-      # queries can find the highest dev version. For dev releases the
-      # tag points at an orphan commit (the package.json bump made in
-      # this CI runner) — pushing the tag carries the orphan commit too.
-      - name: Tag release
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
           CHANNEL: ${{ steps.version.outputs.channel }}
+          PREVIEW: ${{ steps.version.outputs.preview }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # For dev, we haven't committed the bump yet — do it now so the
-          # tag points at the bumped tree. version.ts is guaranteed to
-          # have modified package.json before this step runs, so this
-          # commit always has changes (no --allow-empty needed).
-          if [ "$CHANNEL" = "dev" ]; then
+          set -euo pipefail
+
+          # Build local commit + tag.
+          # For stable: commit on main (will be pushed below).
+          # For dev: detach HEAD first so main stays clean — the orphan
+          # commit gets pushed via the tag itself.
+          if [ "$CHANNEL" = "latest" ]; then
             git add package.json
             git commit -m "release: $TAG"
+            git tag "$TAG" -m "Release $TAG"
+          else
+            git checkout --detach
+            git add package.json
+            git commit -m "release: $TAG"
+            git tag "$TAG" -m "Release $TAG"
           fi
-          git tag "$TAG"
-          git push origin "$TAG"
+          echo "::notice::Built local commit + tag $TAG ($(git rev-parse HEAD))"
 
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
-          PREVIEW: ${{ steps.version.outputs.preview }}
-        run: |
+          # Push refs with retries. Single git push command per branch
+          # to keep the operation as atomic as git allows.
+          push_with_retry() {
+            local max=3
+            for i in $(seq 1 $max); do
+              if "$@"; then
+                return 0
+              fi
+              if [ "$i" -lt "$max" ]; then
+                echo "  push attempt $i/$max failed, retrying in 5s..."
+                sleep 5
+              fi
+            done
+            return 1
+          }
+
+          if [ "$CHANNEL" = "latest" ]; then
+            push_with_retry git push origin HEAD --follow-tags
+          else
+            push_with_retry git push origin "$TAG"
+          fi
+          echo "::notice::Pushed $TAG to origin"
+
+          # Create the GH release (last step). Retried 3x with backoff.
           PRERELEASE_FLAG=""
           if [ "$PREVIEW" = "true" ]; then
             PRERELEASE_FLAG="--prerelease"
           fi
-          gh release create "$TAG" \
-            --title "$TAG" \
-            --generate-notes \
-            $PRERELEASE_FLAG
+
+          gh_release_create() {
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --generate-notes \
+              $PRERELEASE_FLAG
+          }
+
+          for i in 1 2 3; do
+            if gh_release_create; then
+              echo "::notice::Created GitHub release $TAG"
+              exit 0
+            fi
+            if [ "$i" -lt 3 ]; then
+              echo "  gh release create attempt $i/3 failed, retrying in 5s..."
+              sleep 5
+            fi
+          done
+          echo "::error::Failed to create GH release $TAG after 3 attempts"
+          exit 1
+
+      # Recovery handler: runs ONLY when npm publish succeeded but the
+      # post-publish tag/release operations failed (or were skipped due
+      # to a failure between them). Prints exact manual recovery
+      # commands so the operator can complete the release by hand.
+      - name: Print recovery instructions on partial failure
+        if: failure() && steps.publish.outcome == 'success' && steps.tag_and_release.outcome != 'success'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CHANNEL: ${{ steps.version.outputs.channel }}
+          PREVIEW: ${{ steps.version.outputs.preview }}
+        run: |
+          cat >&2 <<MSG
+
+          ============================================================
+          PARTIAL PUBLISH STATE
+          ============================================================
+
+          npm publish for @kilocode/openclaw-security-advisor@$VERSION
+          SUCCEEDED, but the post-publish git/GitHub-release operations
+          FAILED.
+
+          State right now:
+            - npm:    $VERSION is live (cannot be unpublished)
+            - git:    tag $TAG MAY OR MAY NOT exist on origin (check below)
+            - GH:     release $TAG MAY OR MAY NOT exist (check below)
+
+          To complete the release manually, run from your local checkout:
+
+              cd /path/to/openclaw-security-advisor
+              git fetch origin --tags
+
+              # First check what already exists:
+              git ls-remote --tags origin "$TAG"
+              gh release view "$TAG" --repo Kilo-Org/openclaw-security-advisor
+
+          MSG
+
+          if [ "$CHANNEL" = "latest" ]; then
+            cat >&2 <<'MSG'
+          # === STABLE channel recovery ===
+          # If the tag is missing, build the commit on main and push with the tag:
+
+          MSG
+            cat >&2 <<MSG
+              git checkout main
+              git pull
+              node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='$VERSION';delete p.private;fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');"
+              git add package.json
+              git commit -m "release: $TAG"
+              git tag "$TAG" -m "Release $TAG"
+              git push origin main --follow-tags
+
+          MSG
+          else
+            cat >&2 <<'MSG'
+          # === DEV channel recovery ===
+          # If the tag is missing, build an orphan commit (does NOT touch main):
+
+          MSG
+            cat >&2 <<MSG
+              git checkout main
+              git pull
+              git checkout --detach
+              node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='$VERSION';delete p.private;fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');"
+              git add package.json
+              git commit -m "release: $TAG"
+              git tag "$TAG" -m "Release $TAG"
+              git push origin "$TAG"
+              git checkout main  # CRITICAL: get back to main from detached HEAD
+
+          MSG
+          fi
+
+          PRERELEASE_FLAG=""
+          if [ "$PREVIEW" = "true" ]; then
+            PRERELEASE_FLAG=" --prerelease"
+          fi
+
+          cat >&2 <<MSG
+          # If the GH release is missing, create it:
+
+              gh release create "$TAG" \\
+                --repo Kilo-Org/openclaw-security-advisor \\
+                --title "$TAG" \\
+                --generate-notes${PRERELEASE_FLAG}
+
+          ============================================================
+
+          MSG
+          exit 1

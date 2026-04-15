@@ -14,24 +14,48 @@ concrete remediation guidance, displayed directly in your chat.
 ## Install
 
 ```bash
-openclaw plugins install @kilocode/openclaw-security-advisor
+openclaw plugins install @kilocode/openclaw-security-advisor@dev
 openclaw plugins enable openclaw-security-advisor
 openclaw gateway restart
 ```
 
-That's it. On first use, the plugin will walk you through a one-time
-device auth flow to connect your KiloCode account.
+> **Why `@dev`?** No stable release has shipped yet — only dev snapshots
+> (`0.1.0-dev.N`). The `@dev` tag is currently the only working install
+> path. Plain `openclaw plugins install @kilocode/openclaw-security-advisor`
+> (without `@dev`) **will fail today** with a prerelease-guard error,
+> because npm's `latest` dist-tag still points at a dev version on
+> pre-stable packages. Once the first stable release (`X.Y.Z`) ships,
+> you'll be able to drop the `@dev` suffix and use the plain command.
+> See [Channels](#channels) below.
+
+On first use, the plugin will walk you through a one-time device auth
+flow to connect your KiloCode account.
 
 ### Channels
 
 The plugin ships on two npm dist-tags:
 
-- `latest` (default) — public stable releases (`X.Y.Z`).
-- `dev` — internal dogfood snapshots (`X.Y.Z-dev.N`). Install with:
+- **`latest`** — public stable releases (`X.Y.Z`). Default for plain
+  `npm install` / `openclaw plugins install`. Will exist once the first
+  stable release ships.
+- **`dev`** — internal dogfood snapshots (`X.Y.Z-dev.N`). Install with:
 
   ```bash
   openclaw plugins install @kilocode/openclaw-security-advisor@dev
+  # or
+  npm install @kilocode/openclaw-security-advisor@dev
   ```
+
+  Dev releases are real npm publishes with the same provenance
+  attestation as stable releases (verify with `npm audit signatures`).
+  They're "internal" only by social convention and by being on a
+  non-default dist-tag — there's nothing technically restricting access.
+
+You can also install an exact version directly:
+
+```bash
+openclaw plugins install @kilocode/openclaw-security-advisor@0.1.0-dev.1
+```
 
 ---
 

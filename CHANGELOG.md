@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Release workflow: consolidated post-publish git/GitHub operations into a single atomic step with retries, eliminating a race condition where the version bump commit and tag could be pushed separately. Registry verification is now informational-only and never blocks tag/release steps.
+- Release workflow: added a `Reconcile latest dist-tag` step that automatically repoints `npm dist-tags.latest` back to the highest stable version after a dev publish, preventing npm's first-publish auto-assign behavior from routing plain `npm install` users to a prerelease.
+
+### Documentation
+
+- README install section now leads with the `@dev` install command and explains why the plain install will fail until the first stable release ships.
+- RELEASING.md documents the first-publish `latest` dist-tag quirk, the workflow's reconciliation step, and what its expected `::warning::` output means.
+
 ## [0.1.0-dev.1] - 2026-04-15
 
 Initial dev release.

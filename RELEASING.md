@@ -319,3 +319,39 @@ untouched.
 Subsequent dev cuts can leave `version` blank — the workflow auto-bumps
 the dev counter (`0.1.0-dev.2`, `0.1.0-dev.3`, …) until you start a new
 dev cycle with a `bump` input.
+
+### Known quirk: first-publish `latest` dist-tag
+
+On the very first publish of a brand-new npm package, npm auto-assigns
+the `latest` dist-tag to that first version, **regardless of `--tag dev`
+on the publish command**. There is no way to prevent this from the
+publish side — it's npm's behavior for ensuring every package has a
+`latest` resolvable.
+
+The publish workflow includes a `Reconcile latest dist-tag (dev publishes)`
+step that runs after every dev publish. It tries to repoint `latest` to
+the highest existing stable version. As long as no stable release has
+ever shipped (the entire pre-stable phase, e.g. while you're iterating
+on `0.1.0-dev.N`), the step has nothing to repoint to and emits a
+`::warning::` annotation on the workflow run. **This warning is expected
+and non-fatal** — it just documents that `latest` is still pointing at
+a dev version.
+
+Once you ship the first stable release with `channel=latest`, that
+publish overwrites `latest` with the stable version naturally. From
+then on the reconciliation step stays quiet.
+
+While the package is pre-stable, end users **must** install the dev
+channel explicitly:
+
+```bash
+openclaw plugins install @kilocode/openclaw-security-advisor@dev
+# or
+npm install @kilocode/openclaw-security-advisor@dev
+```
+
+Plain `openclaw plugins install @kilocode/openclaw-security-advisor`
+(no `@dev`) will resolve to whatever `latest` currently points at, and
+since `latest` currently points at a prerelease, OpenClaw's prerelease
+guard will refuse the install with a confusing error. See
+[README.md](./README.md) for the user-facing install instructions.
