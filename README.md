@@ -22,6 +22,17 @@ openclaw gateway restart
 That's it. On first use, the plugin will walk you through a one-time
 device auth flow to connect your KiloCode account.
 
+### Channels
+
+The plugin ships on two npm dist-tags:
+
+- `latest` (default) — public stable releases (`X.Y.Z`).
+- `dev` — internal dogfood snapshots (`X.Y.Z-dev.N`). Install with:
+
+  ```bash
+  openclaw plugins install @kilocode/openclaw-security-advisor@dev
+  ```
+
 ---
 
 ## Usage

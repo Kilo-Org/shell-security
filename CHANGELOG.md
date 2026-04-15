@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0-beta.1] - 2026-04-15
+## [0.1.0-dev.1] - 2026-04-15
 
-Initial beta release.
+Initial dev release.
 
 ### Added
 
@@ -21,5 +21,5 @@ Initial beta release.
 - Audit output validated with a Zod schema at the plugin boundary.
 - Public IP detection via `ifconfig.me` with IPv4/IPv6 validation.
 
-[Unreleased]: https://github.com/Kilo-Org/openclaw-security-advisor/compare/v0.1.0-beta.1...HEAD
-[0.1.0-beta.1]: https://github.com/Kilo-Org/openclaw-security-advisor/releases/tag/v0.1.0-beta.1
+[Unreleased]: https://github.com/Kilo-Org/openclaw-security-advisor/compare/v0.1.0-dev.1...HEAD
+[0.1.0-dev.1]: https://github.com/Kilo-Org/openclaw-security-advisor/releases/tag/v0.1.0-dev.1
