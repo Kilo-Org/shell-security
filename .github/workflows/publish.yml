@@ -72,8 +72,13 @@ jobs:
       # Fail fast on bad/missing NPM_TOKEN before any side effects
       # (version.ts writes to package.json, network calls to GH, etc.)
       # Surfaces auth issues in ~2s instead of mid-publish.
+      # npm whoami does NOT work with OIDC trusted publishing — it only
+      # works with a static token. We keep NODE_AUTH_TOKEN here for this
+      # check only. The actual publish step uses OIDC (no token).
       - name: Verify npm auth
         run: npm whoami --registry=https://registry.npmjs.org/
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Resolve version
         id: version
@@ -152,10 +157,13 @@ jobs:
       #
       # Like the verify step above, this is INFORMATIONAL only —
       # it never fails the workflow and never blocks tag/release.
+      # npm dist-tag add is a write operation NOT covered by OIDC trusted
+      # publishing (OIDC only covers npm publish). Still needs the token.
       - name: Reconcile latest dist-tag (dev publishes)
         if: steps.publish.outcome == 'success' && steps.version.outputs.channel == 'dev'
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           PKG="@kilocode/openclaw-security-advisor"
