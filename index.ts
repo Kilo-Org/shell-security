@@ -300,13 +300,19 @@ export default definePluginEntry({
   // SecretRef after device auth, which would force a full gateway
   // restart on first-time token capture. Plugin-registered reload
   // rules are evaluated before the base rules (first-match wins), so
-  // declaring our own config subtree as a noop shadows the base
-  // restart rule for this plugin without affecting anything else.
-  // The plugin reads the token directly via readTokenFromFile(), so
-  // there's no need for a hot-resolve of api.pluginConfig.authToken —
-  // noop is sufficient.
+  // declaring just the authToken path as a noop shadows the base
+  // restart rule for that one field without affecting anything else.
+  //
+  // Scope is intentionally narrow — only `.config.authToken`, NOT the
+  // full `.config` subtree. `apiBaseUrl` is captured as a snapshot in
+  // register() (see `pluginConfig` below), so runtime updates to it
+  // still need to fall through to the base `plugins.* → restart` rule
+  // to take effect. The plugin reads the token directly from disk via
+  // readTokenFromFile() on every invocation, so authToken noop is safe.
   reload: {
-    noopPrefixes: ["plugins.entries.openclaw-security-advisor.config"],
+    noopPrefixes: [
+      "plugins.entries.openclaw-security-advisor.config.authToken",
+    ],
   },
   // The SDK's OpenClawPluginApi type is large and internal. We narrow
   // to our own structural PluginApi (declared above) immediately on
