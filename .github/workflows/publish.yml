@@ -54,7 +54,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
@@ -68,14 +68,6 @@ jobs:
 
       - name: Format check
         run: bun run format:check
-
-      # Fail fast on bad/missing NPM_TOKEN before any side effects
-      # (version.ts writes to package.json, network calls to GH, etc.)
-      # Surfaces auth issues in ~2s instead of mid-publish.
-      - name: Verify npm auth
-        run: npm whoami --registry=https://registry.npmjs.org/
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Resolve version
         id: version
@@ -107,11 +99,15 @@ jobs:
       #   recovery handler prints the exact manual recovery commands.
       # ============================================================
 
+      # Authentication for npm publish uses OIDC trusted publishing —
+      # no NODE_AUTH_TOKEN needed. npm CLI auto-detects the OIDC
+      # environment when id-token: write is set and no token is present.
+      # Configured on npmjs.com under package settings → Trusted Publishers.
+      # Requires npm CLI v11.5.1+ and Node 22.14.0+.
       - name: Publish to npm
         id: publish
         run: bun script/publish.ts
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
           KILO_CHANNEL: ${{ steps.version.outputs.channel }}
 
@@ -138,114 +134,6 @@ jobs:
             sleep 10
           done
           echo "::warning::Could not verify $VERSION on the registry after 60s of polling. The publish step itself reported success; verification is informational only and the workflow will continue to the tag/release steps."
-          exit 0
-
-      # Reconcile npm dist-tags.latest after a dev publish. On the very
-      # first publish of a new package, npm auto-assigns `latest` to
-      # whatever version was published, regardless of `--tag dev`. That
-      # leaves end users running plain `npm install <pkg>` getting a
-      # prerelease, which trips OpenClaw's prerelease guard with a
-      # confusing error.
-      #
-      # This step runs ONLY for dev-channel publishes, and ONLY when
-      # `latest` currently points at a prerelease version. It tries to
-      # repoint `latest` to the highest existing stable. If no stable
-      # exists yet (the pre-stable phase, i.e. before the first
-      # `channel=latest` release), it emits a warning and exits 0.
-      #
-      # Like the verify step above, this is INFORMATIONAL only —
-      # it never fails the workflow and never blocks tag/release.
-      - name: Reconcile latest dist-tag (dev publishes)
-        if: steps.publish.outcome == 'success' && steps.version.outputs.channel == 'dev'
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euo pipefail
-          PKG="@kilocode/openclaw-security-advisor"
-
-          # Read dist-tags via the registry HTTP endpoint (faster
-          # propagation than `npm view` which has a separate cache layer
-          # and can return stale data for 30-90s after a publish).
-          # Retry up to 3x with 5s backoff in case the dist-tags entry
-          # itself hasn't propagated yet.
-          fetch_latest_dist_tag() {
-            curl -s "https://registry.npmjs.org/-/package/$PKG/dist-tags" 2>/dev/null | node -e '
-              let s = "";
-              process.stdin.on("data", d => s += d);
-              process.stdin.on("end", () => {
-                try { console.log(JSON.parse(s).latest || ""); }
-                catch { console.log(""); }
-              });
-            ' || echo ""
-          }
-
-          LATEST=""
-          for attempt in 1 2 3; do
-            LATEST=$(fetch_latest_dist_tag)
-            if [ -n "$LATEST" ]; then
-              break
-            fi
-            if [ "$attempt" -lt 3 ]; then
-              echo "  dist-tags query attempt $attempt/3 returned empty, retrying in 5s..."
-              sleep 5
-            fi
-          done
-          echo "Current dist-tags.latest: ${LATEST:-<unset>}"
-
-          # If `latest` is empty or already a stable version (no `-`),
-          # there's nothing to reconcile.
-          case "$LATEST" in
-            "")
-              echo "::notice::dist-tags.latest is unset; nothing to reconcile"
-              exit 0
-              ;;
-            *-*)
-              : # prerelease — fall through to reconciliation
-              ;;
-            *)
-              echo "::notice::dist-tags.latest is already a stable version ($LATEST); nothing to reconcile"
-              exit 0
-              ;;
-          esac
-
-          # Find the highest stable version on the registry. Handles
-          # both shapes of `npm view ... versions --json`: a string for
-          # single-version packages, an array for multi-version.
-          HIGHEST_STABLE=$(npm view "$PKG" versions --json 2>/dev/null | node -e '
-            let s = "";
-            process.stdin.on("data", d => s += d);
-            process.stdin.on("end", () => {
-              try {
-                const data = JSON.parse(s);
-                const arr = Array.isArray(data) ? data : [data];
-                const stable = arr.filter(x => typeof x === "string" && !x.includes("-"));
-                if (!stable.length) process.exit(42);
-                stable.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-                console.log(stable[stable.length - 1]);
-              } catch {
-                process.exit(43);
-              }
-            });
-          ') || HIGHEST_STABLE=""
-
-          if [ -z "$HIGHEST_STABLE" ]; then
-            echo "::warning::No stable version of $PKG exists on the registry yet. npm auto-assigned dist-tags.latest to the just-published dev version ($LATEST) because --tag dev alone cannot prevent it on a first publish. Users must opt in to the dev channel explicitly: 'openclaw plugins install $PKG@dev' or 'npm install $PKG@dev'. This is expected and non-fatal until the first stable (channel=latest) release ships, at which point this step will repoint latest automatically."
-            exit 0
-          fi
-
-          echo "Highest stable on registry: $HIGHEST_STABLE — repointing latest..."
-          for i in 1 2 3; do
-            if npm dist-tag add "$PKG@$HIGHEST_STABLE" latest; then
-              echo "::notice::Repointed dist-tags.latest from $LATEST to $HIGHEST_STABLE"
-              exit 0
-            fi
-            if [ "$i" -lt 3 ]; then
-              echo "  attempt $i/3 failed, retrying in 5s..."
-              sleep 5
-            fi
-          done
-          echo "::warning::Failed to repoint dist-tags.latest to $HIGHEST_STABLE after 3 attempts. Manual fix: npm dist-tag add $PKG@$HIGHEST_STABLE latest"
           exit 0
 
       - name: Configure git identity
