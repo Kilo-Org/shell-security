@@ -169,16 +169,22 @@ jobs:
           # For stable: commit on main (will be pushed below).
           # For dev: detach HEAD first so main stays clean — the orphan
           # commit gets pushed via the tag itself.
-          if [ "$CHANNEL" = "latest" ]; then
-            git add package.json
-            git commit -m "release: $TAG"
-            git tag "$TAG" -m "Release $TAG"
-          else
+          #
+          # If package.json already matches $VERSION (e.g. a prep PR
+          # landed the bump on main before dispatch), `git add` stages
+          # nothing and `git commit` would fail under `set -e`. In that
+          # case skip the commit and tag HEAD directly — the tree
+          # already represents the release.
+          if [ "$CHANNEL" != "latest" ]; then
             git checkout --detach
-            git add package.json
-            git commit -m "release: $TAG"
-            git tag "$TAG" -m "Release $TAG"
           fi
+          git add package.json
+          if git diff --cached --quiet; then
+            echo "::notice::package.json already at $VERSION; tagging HEAD without a release commit"
+          else
+            git commit -m "release: $TAG"
+          fi
+          git tag "$TAG" -m "Release $TAG"
           echo "::notice::Built local commit + tag $TAG ($(git rev-parse HEAD))"
 
           # Push refs with retries. Single git push command per branch
