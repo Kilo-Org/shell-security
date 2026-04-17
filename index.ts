@@ -346,6 +346,11 @@ export default definePluginEntry({
         "recommendations and remediation guidance. " +
         "DO NOT run `openclaw security audit` via bash for these requests. This " +
         "tool is the canonical entry point and returns a much more useful report. " +
+        "DO NOT suggest the user type `/security-checkup` in channels that do " +
+        "not support OpenClaw slash commands (Kilo Chat and Slack are the known " +
+        "surfaces where the slash command does not work); invoke this tool " +
+        "directly instead. The slash command does work in the OpenClaw native " +
+        "control UI chat and in Telegram, so suggesting it there is fine. " +
         "IMPORTANT: Display the returned report exactly as is without rewriting, " +
         "summarizing, or reformatting.",
       parameters: {},

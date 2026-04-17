@@ -4,6 +4,43 @@ Releases are cut from the `publish` workflow in GitHub Actions. There is no
 local release script, no automated release on push, and no changesets tool.
 Every release is a manual `workflow_dispatch`.
 
+> ⚠️ **Current state (as of 2026-04-17):** `github-actions[bot]` is not on
+> the `main` branch ruleset's bypass list. As a result, **every stable
+> (`channel=latest`) publish run will fail at the "Tag and release
+> (post-publish)" step** with `GH013: Repository rule violations found for
+refs/heads/main — Changes must be made through a pull request`. This is
+> expected today; the failure mode is the one documented in
+> [Scenario 4](#scenario-4-publish-succeeded-but-commit--tag-push-failed)
+> below.
+>
+> **What to do after a failed stable run:**
+>
+> 1. Don't re-run the workflow. `npm publish` already succeeded and the
+>    version is live on the registry. The git tag `vX.Y.Z` will typically
+>    have landed too (tags aren't covered by the branch ruleset), even
+>    though main's push was rejected.
+> 2. Check what's actually missing:
+>    ```bash
+>    git fetch origin --tags
+>    git ls-remote --tags origin "vX.Y.Z"                              # is tag there?
+>    gh release view "vX.Y.Z" --repo Kilo-Org/openclaw-security-advisor # is release there?
+>    ```
+> 3. Create the GitHub release manually — this is the only step that
+>    reliably needs to be done by hand:
+>    ```bash
+>    gh release create vX.Y.Z \
+>      --repo Kilo-Org/openclaw-security-advisor \
+>      --title vX.Y.Z \
+>      --generate-notes
+>    ```
+> 4. Leave `main`'s `package.json` alone. `script/version.ts` computes the
+>    next version from git tags, not from `package.json`, so main staying
+>    at a previous version is cosmetic, not load-bearing.
+>
+> This banner can be removed once the ruleset bypass is configured (see
+> [Branch protection](#branch-protection)) or the workflow is refactored
+> so stable publishes don't push to `main` at all.
+
 ## Channels
 
 There are exactly two channels and they correspond to npm dist-tags:
@@ -288,6 +325,21 @@ When branch protection / rulesets are enabled on `main`, the
 `github-actions[bot]` actor **must** be added to the ruleset's bypass actors
 list. Without it, the publish workflow's stable-channel commit step fails,
 triggering the recovery procedure above.
+
+> **Status today:** the `Main branch protection` ruleset on this repo
+> (`Settings → Rules → Rulesets`) is active but does NOT include
+> `github-actions[bot]` as a bypass actor. This is why the banner at the
+> top of this document describes the manual recovery step as expected
+> behavior for every stable publish. Two viable durable fixes, pick one:
+>
+> 1. **Add the bot to the bypass list** (Settings → Rules → the ruleset
+>    → Bypass list → add the `github-actions` app with bypass mode
+>    `Always`). Fastest; keeps the current workflow unchanged.
+> 2. **Refactor the stable publish path** to match the dev-channel flow:
+>    detach HEAD, commit, tag, push only the tag — never touch `main`.
+>    Keeps the ruleset strict with no carve-outs; the trade-off is that
+>    `main`'s `package.json` version drifts behind the latest release
+>    (cosmetic only, since `version.ts` reads from tags).
 
 Dev-channel publishes don't push to `main` (only push the tag), so they're
 less affected by branch protection on `main` itself. The tag push still

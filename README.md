@@ -65,6 +65,13 @@ This is a slash command. It runs the plugin directly and renders the
 full report, bypassing the agent's summarization layer entirely. **Use
 this for guaranteed verbatim output.**
 
+> **Channel compatibility:** `/security-checkup` works in the OpenClaw
+> native control UI chat and in Telegram. It does **not** currently work
+> in Kilo Chat or Slack — those surfaces don't route slash commands to
+> OpenClaw plugins. In Kilo Chat and Slack, use the natural-language
+> invocation below instead; the agent will call the
+> `kilocode_security_advisor` tool directly.
+
 ### Natural language
 
 You can also just ask the agent:
@@ -84,8 +91,9 @@ showing it to you. This works well on capable models (GPT-4o, Claude
 Sonnet, Gemini Pro) but small summarizing models (e.g. GPT-4.1-nano,
 Haiku) will often paraphrase the report down to a few sentences. **If
 you're running a small or summarizing model, use the
-`/security-checkup` slash command instead.** It renders the full
-report regardless of which model is configured.
+`/security-checkup` slash command instead** (where supported — see
+channel compatibility above). It renders the full report regardless of
+which model is configured.
 
 ---
 

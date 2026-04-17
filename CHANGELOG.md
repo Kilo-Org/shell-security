@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- README `Usage` section now documents slash-command channel compatibility: `/security-checkup` works in the OpenClaw native control UI chat and in Telegram but not in Kilo Chat or Slack. Kilo Chat and Slack users should invoke the plugin via natural language so the agent calls the `kilocode_security_advisor` tool directly.
+- `kilocode_security_advisor` tool description now hints the agent to invoke the tool directly (rather than suggesting the slash command) in channels that don't route OpenClaw slash commands, namely Kilo Chat and Slack.
+- RELEASING.md: added a prominent top-of-document banner describing the current state — `github-actions[bot]` is not on the `main` ruleset's bypass list, so every stable publish will fail at the post-publish push step; the `gh release create` recovery is the expected manual step until the ruleset is reconfigured or the workflow is refactored. Expanded the `Branch protection` section with the two durable fix options (add bot to bypass list vs refactor stable path to tag-only).
 - README install section leads with the plain install command (no `@dev` suffix) now that a stable release is shipping. The dev channel is documented as a prerelease option under `Channels`.
 - README `Contributing` links to `AGENTS.md`, `RELEASING.md`, and `CHANGELOG.md` are now absolute GitHub URLs, so they resolve correctly on the npm package page (those docs were never shipped in the tarball).
 - README now documents `KILO_API_KEY` as an alias for `KILOCODE_API_KEY` (both have always been accepted by the code).
