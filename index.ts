@@ -126,7 +126,7 @@ async function runSecurityAdvisorFlow(
   const configToken = api.pluginConfig?.authToken;
   if (typeof configToken === "string" && configToken.length > 0) {
     try {
-      return await doCheckup(apiBase, configToken);
+      return await doCheckup(api, apiBase, configToken);
     } catch (err) {
       if (err instanceof AuthExpiredError) {
         return (
@@ -144,7 +144,7 @@ async function runSecurityAdvisorFlow(
   const envToken = resolveEnvToken();
   if (envToken) {
     try {
-      return await doCheckup(apiBase, envToken);
+      return await doCheckup(api, apiBase, envToken);
     } catch (err) {
       if (err instanceof AuthExpiredError) {
         return (
@@ -164,7 +164,7 @@ async function runSecurityAdvisorFlow(
   const savedToken = await readTokenFromFile();
   if (savedToken) {
     try {
-      return await doCheckup(apiBase, savedToken);
+      return await doCheckup(api, apiBase, savedToken);
     } catch (err) {
       if (!(err instanceof AuthExpiredError)) throw err;
       await clearStoredToken();
@@ -190,7 +190,7 @@ async function runSecurityAdvisorFlow(
       // subsequent invocations skip device auth and go straight to Path B.
       const reportMarkdown = await (async (): Promise<string> => {
         try {
-          return await doCheckup(apiBase, pollResult.token);
+          return await doCheckup(api, apiBase, pollResult.token);
         } catch (err) {
           if (err instanceof AuthExpiredError) {
             // Edge case: server approved the token but immediately
@@ -269,7 +269,11 @@ async function runSecurityAdvisorFlow(
   );
 }
 
-async function doCheckup(apiBase: string, token: string): Promise<string> {
+async function doCheckup(
+  api: PluginApi,
+  apiBase: string,
+  token: string,
+): Promise<string> {
   const auditResult = await runAudit();
   if (!auditResult.ok) {
     return auditResult.error;
@@ -281,7 +285,7 @@ async function doCheckup(apiBase: string, token: string): Promise<string> {
     audit: auditResult.audit,
     publicIp,
     source: {
-      platform: detectPlatform(),
+      platform: detectPlatform(api.runtime.config.loadConfig()),
       method: "plugin",
       pluginVersion: PLUGIN_VERSION,
     },
