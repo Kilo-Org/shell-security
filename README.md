@@ -14,19 +14,10 @@ concrete remediation guidance, displayed directly in your chat.
 ## Install
 
 ```bash
-openclaw plugins install @kilocode/openclaw-security-advisor@dev
+openclaw plugins install @kilocode/openclaw-security-advisor
 openclaw plugins enable openclaw-security-advisor
 openclaw gateway restart
 ```
-
-> **Why `@dev`?** No stable release has shipped yet — only dev snapshots
-> (`0.1.0-dev.N`). The `@dev` tag is currently the only working install
-> path. Plain `openclaw plugins install @kilocode/openclaw-security-advisor`
-> (without `@dev`) **will fail today** with a prerelease-guard error,
-> because npm's `latest` dist-tag still points at a dev version on
-> pre-stable packages. Once the first stable release (`X.Y.Z`) ships,
-> you'll be able to drop the `@dev` suffix and use the plain command.
-> See [Channels](#channels) below.
 
 On first use, the plugin will walk you through a one-time device auth
 flow to connect your KiloCode account.
@@ -35,10 +26,10 @@ flow to connect your KiloCode account.
 
 The plugin ships on two npm dist-tags:
 
-- **`latest`** — public stable releases (`X.Y.Z`). Default for plain
-  `npm install` / `openclaw plugins install`. Will exist once the first
-  stable release ships.
-- **`dev`** — internal dogfood snapshots (`X.Y.Z-dev.N`). Install with:
+- **`latest`** — stable releases (`X.Y.Z`). Default for plain
+  `npm install` / `openclaw plugins install`.
+- **`dev`** — prerelease snapshots (`X.Y.Z-dev.N`) published ahead of
+  stable cuts for early testing. Install with:
 
   ```bash
   openclaw plugins install @kilocode/openclaw-security-advisor@dev
@@ -48,13 +39,11 @@ The plugin ships on two npm dist-tags:
 
   Dev releases are real npm publishes with the same provenance
   attestation as stable releases (verify with `npm audit signatures`).
-  They're "internal" only by social convention and by being on a
-  non-default dist-tag — there's nothing technically restricting access.
 
 You can also install an exact version directly:
 
 ```bash
-openclaw plugins install @kilocode/openclaw-security-advisor@0.1.0-dev.1
+openclaw plugins install @kilocode/openclaw-security-advisor@0.1.0
 ```
 
 ---
@@ -175,9 +164,10 @@ openclaw config set plugins.entries.openclaw-security-advisor.config.apiBaseUrl 
 The plugin also respects these environment variables, useful for
 non-interactive setups (CI, containerized deployments):
 
-- `KILOCODE_API_KEY`: if set, the plugin uses this as the auth token
-  and skips the device auth flow entirely. Intended for environments
-  where an operator has already injected the key at boot.
+- `KILOCODE_API_KEY` (alias: `KILO_API_KEY`): if set, the plugin uses
+  this as the auth token and skips the device auth flow entirely.
+  Intended for environments where an operator has already injected the
+  key at boot.
 - `KILO_API_URL` or `KILOCODE_API_BASE_URL`: override the API base URL
   without touching the plugin config.
 
@@ -213,18 +203,13 @@ openclaw gateway restart
 The plugin itself works without this setting. It's only needed if you
 want the `/plugins list` chat command to show installed plugins.
 
-**The gateway restarts after device auth**
-This is expected on first auth: the plugin writes your token to the
-OpenClaw config, which triggers a one-time gateway reload. Subsequent
-checkups don't reload.
-
 ---
 
 ## Contributing
 
-- [`AGENTS.md`](./AGENTS.md) — build, test, lint, code layout, and contribution rules.
-- [`RELEASING.md`](./RELEASING.md) — how to cut a release.
-- [`CHANGELOG.md`](./CHANGELOG.md) — release history.
+- [`AGENTS.md`](https://github.com/Kilo-Org/openclaw-security-advisor/blob/main/AGENTS.md) — build, test, lint, code layout, and contribution rules.
+- [`RELEASING.md`](https://github.com/Kilo-Org/openclaw-security-advisor/blob/main/RELEASING.md) — how to cut a release.
+- [`CHANGELOG.md`](https://github.com/Kilo-Org/openclaw-security-advisor/blob/main/CHANGELOG.md) — release history.
 
 ---
 

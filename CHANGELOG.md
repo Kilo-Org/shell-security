@@ -15,8 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
-- README install section now leads with the `@dev` install command and explains why the plain install will fail until the first stable release ships.
+- README install section leads with the plain install command (no `@dev` suffix) now that a stable release is shipping. The dev channel is documented as a prerelease option under `Channels`.
+- README `Contributing` links to `AGENTS.md`, `RELEASING.md`, and `CHANGELOG.md` are now absolute GitHub URLs, so they resolve correctly on the npm package page (those docs were never shipped in the tarball).
+- README now documents `KILO_API_KEY` as an alias for `KILOCODE_API_KEY` (both have always been accepted by the code).
+- Removed the stale "The gateway restarts after device auth" troubleshooting entry. The restart no longer happens after the `reload.noopPrefixes` fix above.
+- Exact-version install example updated from `0.1.0-dev.1` to `0.1.0`.
 - RELEASING.md documents the first-publish `latest` dist-tag quirk, the workflow's reconciliation step, and what its expected `::warning::` output means.
+
+### Packaging
+
+- Added npm `keywords` to `package.json` (`openclaw`, `kiloclaw`, `kilocode`, `security`) for registry discoverability.
 
 ## [0.1.0-dev.1] - 2026-04-15
 
