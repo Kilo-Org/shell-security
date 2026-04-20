@@ -132,7 +132,7 @@ KiloCode account:
 To run a security checkup, connect your KiloCode account.
 
 1. Open this URL in your browser:
-   https://app.kilo.ai/device-auth?code=XXXX-XXXX
+   https://app.kilo.ai/openclaw-advisor?code=XXXX-XXXX
 
 2. Enter this code: XXXX-XXXX
 

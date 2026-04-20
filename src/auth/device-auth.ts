@@ -54,6 +54,13 @@ export type DeviceAuthPollResult =
 /**
  * Create a device auth request and return the code + URL for the user to visit.
  * Call this once, show the result to the user, then poll with pollDeviceAuth().
+ *
+ * Note: the server returns a generic `/device-auth?code=...` URL in `verificationUrl`,
+ * but we construct our own landing URL pointing at `/openclaw-advisor?code=...`.
+ * The cloud side uses the path prefix to attribute Security Advisor signups and
+ * layer a per-product signup bonus on top of the standard welcome credits.
+ * Old plugin builds keep working against the server — they just land on the generic
+ * URL and don't qualify for the bonus, which is the intended behavior.
  */
 export async function startDeviceAuth(
   apiBase: string,
@@ -72,7 +79,7 @@ export async function startDeviceAuth(
   return {
     kind: "started",
     code: data.code,
-    verificationUrl: data.verificationUrl,
+    verificationUrl: `${apiBase}/openclaw-advisor?code=${encodeURIComponent(data.code)}`,
     expiresIn: data.expiresIn,
   };
 }
