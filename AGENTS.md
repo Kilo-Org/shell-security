@@ -1,8 +1,9 @@
 # AGENTS.md
 
-`@kilocode/openclaw-security-advisor` is an OpenClaw plugin that runs a local
-`openclaw security audit`, sends it to the KiloCode Security Advisor API, and
-renders the returned markdown report inline in chat.
+`@kilocode/shell-security` (previously `@kilocode/openclaw-security-advisor`)
+is an OpenClaw plugin that runs a local `openclaw security audit`, sends it
+to the KiloCode ShellSecurity API, and renders the returned markdown report
+inline in chat.
 
 - The default branch is `main`.
 - Releases are gated on manual `workflow_dispatch` — never publish from a push trigger.
@@ -53,7 +54,7 @@ Releases are triggered manually from GitHub Actions → `publish` workflow →
 
 - **`latest`** — public stable releases (`X.Y.Z`). Default for `npm install`.
 - **`dev`** — internal dogfood snapshots (`X.Y.Z-dev.N`). Available via
-  `npm install @kilocode/openclaw-security-advisor@dev`.
+  `npm install @kilocode/shell-security@dev`.
 
 There is no `beta`, `rc`, `next`, or `canary`. Two channels, that's it.
 
@@ -108,18 +109,18 @@ Until then, release commits:
 ## Code layout
 
 - `index.ts` — plugin entry point; registers `/security-checkup` command and
-  `kilocode_security_advisor` tool; shared `runSecurityAdvisorFlow` handles
+  `kilocode_shell_security` tool; shared `runShellSecurityFlow` handles
   all auth paths (env token, saved token, pending device auth, new device auth).
 - `src/audit.ts` — runs `openclaw security audit --json`, parses + validates
   output, fetches public IP.
-- `src/client.ts` — HTTP client for the Security Advisor API; throws
+- `src/client.ts` — HTTP client for the ShellSecurity API; throws
   `AuthExpiredError` on 401.
 - `src/platform.ts` — detects `kiloclaw` vs `openclaw`. Kept separate from
   `audit.ts` so the plugin loader's "env read + network send" security
   heuristic doesn't flag the combined file.
 - `src/auth/device-auth.ts` — `startDeviceAuth` + `pollDeviceAuth` helpers.
 - `src/auth/token-store.ts` — persists auth token to
-  `~/.openclaw/secrets/openclaw-security-advisor-auth-token` (mode 600) and
+  `~/.openclaw/secrets/shell-security-auth-token` (mode 600) and
   patches `openclaw.json` with a `SecretRef`. Also manages the pending
   device-auth code file. `patchConfig` is covered by unit tests.
 

@@ -42,7 +42,7 @@ jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-24.04
-    if: github.repository == 'Kilo-Org/openclaw-security-advisor'
+    if: github.repository == 'Kilo-Org/shell-security'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -122,10 +122,10 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          echo "Probing registry for @kilocode/openclaw-security-advisor@$VERSION..."
+          echo "Probing registry for @kilocode/shell-security@$VERSION..."
           for i in 1 2 3 4 5 6; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              "https://registry.npmjs.org/@kilocode/openclaw-security-advisor/$VERSION")
+              "https://registry.npmjs.org/@kilocode/shell-security/$VERSION")
             if [ "$STATUS" = "200" ]; then
               echo "::notice::Verified $VERSION is live on the registry"
               exit 0
@@ -254,7 +254,7 @@ jobs:
           PARTIAL PUBLISH STATE
           ============================================================
 
-          npm publish for @kilocode/openclaw-security-advisor@$VERSION
+          npm publish for @kilocode/shell-security@$VERSION
           SUCCEEDED, but the post-publish git/GitHub-release operations
           FAILED.
 
@@ -265,12 +265,12 @@ jobs:
 
           To complete the release manually, run from your local checkout:
 
-              cd /path/to/openclaw-security-advisor
+              cd /path/to/shell-security
               git fetch origin --tags
 
               # First check what already exists:
               git ls-remote --tags origin "$TAG"
-              gh release view "$TAG" --repo Kilo-Org/openclaw-security-advisor
+              gh release view "$TAG" --repo Kilo-Org/shell-security
 
           MSG
 
@@ -319,7 +319,7 @@ jobs:
           # If the GH release is missing, create it:
 
               gh release create "$TAG" \\
-                --repo Kilo-Org/openclaw-security-advisor \\
+                --repo Kilo-Org/shell-security \\
                 --title "$TAG" \\
                 --generate-notes${PRERELEASE_FLAG}
 

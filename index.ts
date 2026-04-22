@@ -119,7 +119,7 @@ function toolResult(content: string): ToolResult {
 }
 
 /**
- * Top-level wrapper around runSecurityAdvisorFlow. Catches any
+ * Top-level wrapper around runShellSecurityFlow. Catches any
  * unexpected throw from the flow (transient network errors during
  * runAudit, the server returning a non-401 failure, writeStoredToken
  * blowing up with EPERM, etc.) and converts it to a user-friendly
@@ -135,10 +135,10 @@ async function runFlowSafe(
   channel: string | undefined,
 ): Promise<string> {
   try {
-    return await runSecurityAdvisorFlow(api, apiBase, channel);
+    return await runShellSecurityFlow(api, apiBase, channel);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    api.logger.error?.(`security-advisor: unexpected failure: ${message}`);
+    api.logger.error?.(`shell-security: unexpected failure: ${message}`);
     return (
       `Security checkup failed unexpectedly: ${message}\n\n` +
       `Check the openclaw gateway logs for details, or try again.`
@@ -147,19 +147,19 @@ async function runFlowSafe(
 }
 
 /**
- * Shared security-advisor flow used by both the registerTool entry point
+ * Shared shell-security flow used by both the registerTool entry point
  * (natural language invocation via the LLM) and the registerCommand entry
  * point (deterministic /security-checkup slash command).
  *
  * Returns plain markdown. Callers wrap it in whatever shape their
  * registration API expects.
  */
-async function runSecurityAdvisorFlow(
+async function runShellSecurityFlow(
   api: PluginApi,
   apiBase: string,
   channel: string | undefined,
 ): Promise<string> {
-  // Path 0: user explicit config. If `plugins.entries.openclaw-security-advisor.config.authToken`
+  // Path 0: user explicit config. If `plugins.entries.shell-security.config.authToken`
   // is set (as a plain string directly, or as a SecretRef resolved by
   // OpenClaw before we see it), honor it. This is the path for users
   // who want to configure the plugin manually in openclaw.json without
@@ -174,7 +174,7 @@ async function runSecurityAdvisorFlow(
       if (err instanceof AuthExpiredError) {
         return (
           "The `authToken` configured for this plugin in your openclaw.json is invalid or expired. " +
-          "Update `plugins.entries.openclaw-security-advisor.config.authToken` with a fresh KiloCode API key and try again."
+          "Update `plugins.entries.shell-security.config.authToken` with a fresh KiloCode API key and try again."
         );
       }
       throw err;
@@ -256,7 +256,7 @@ async function runSecurityAdvisorFlow(
         // they redo device auth next time.
         const message = err instanceof Error ? err.message : String(err);
         api.logger.warn?.(
-          `security-advisor: failed to persist auth token: ${message}`,
+          `shell-security: failed to persist auth token: ${message}`,
         );
       }
 
@@ -342,13 +342,13 @@ async function doCheckup(
 }
 
 export default definePluginEntry({
-  id: "openclaw-security-advisor",
-  name: "OpenClaw Security Advisor",
+  id: "shell-security",
+  name: "ShellSecurity",
   description:
     "Run a security checkup of your OpenClaw instance and get an expert analysis report from KiloCode.",
   // The gateway reload planner classifies any change under `plugins.*`
   // as `kind: "restart"` by default. writeStoredToken() patches
-  // plugins.entries.openclaw-security-advisor.config.authToken with a
+  // plugins.entries.shell-security.config.authToken with a
   // SecretRef after device auth, which would force a full gateway
   // restart on first-time token capture. Plugin-registered reload
   // rules are evaluated before the base rules (first-match wins), so
@@ -362,9 +362,7 @@ export default definePluginEntry({
   // to take effect. The plugin reads the token directly from disk via
   // readTokenFromFile() on every invocation, so authToken noop is safe.
   reload: {
-    noopPrefixes: [
-      "plugins.entries.openclaw-security-advisor.config.authToken",
-    ],
+    noopPrefixes: ["plugins.entries.shell-security.config.authToken"],
   },
   // The SDK's OpenClawPluginApi type is large and internal. We narrow
   // to our own structural PluginApi (declared above) immediately on
@@ -391,7 +389,7 @@ export default definePluginEntry({
     // so long-running sessions that outlive a channel switch get the
     // refreshed channel automatically.
     api.registerTool((toolCtx: PluginToolContext) => ({
-      name: "kilocode_security_advisor",
+      name: "kilocode_shell_security",
       description:
         "Run a comprehensive security checkup of this OpenClaw instance. " +
         "USE THIS TOOL whenever the user asks to: check, audit, scan, review, or " +
@@ -437,7 +435,7 @@ export default definePluginEntry({
       },
     });
 
-    api.logger.info?.("Registered tool: kilocode_security_advisor");
+    api.logger.info?.("Registered tool: kilocode_shell_security");
     api.logger.info?.("Registered command: /security-checkup");
   },
 });

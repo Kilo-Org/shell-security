@@ -1,11 +1,56 @@
 # Changelog
 
-All notable changes to `@kilocode/openclaw-security-advisor` are documented here.
+All notable changes to `@kilocode/shell-security` (formerly
+`@kilocode/openclaw-security-advisor`) are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0]
+
+First release under the new `@kilocode/shell-security` name. The plugin
+was renamed from `@kilocode/openclaw-security-advisor` to `ShellSecurity`
+to reflect a broader mission than any single agent-shell runtime.
+Functionally identical to `@kilocode/openclaw-security-advisor@0.1.4`.
+
+### Changed
+
+- npm package: `@kilocode/openclaw-security-advisor` → `@kilocode/shell-security`.
+- GitHub repo: `Kilo-Org/openclaw-security-advisor` → `Kilo-Org/shell-security` (old URLs redirect).
+- OpenClaw plugin id: `openclaw-security-advisor` → `shell-security`.
+- Plugin display name: `OpenClaw Security Advisor` → `ShellSecurity`.
+- Tool name: `kilocode_security_advisor` → `kilocode_shell_security`.
+- Install dir: `~/.openclaw/extensions/openclaw-security-advisor/` → `~/.openclaw/extensions/shell-security/`.
+- Secret file: `~/.openclaw/secrets/openclaw-security-advisor-auth-token` → `~/.openclaw/secrets/shell-security-auth-token`.
+- `/security-checkup` slash command name unchanged.
+
+### Migration
+
+Existing users of `@kilocode/openclaw-security-advisor` should run:
+
+```
+openclaw plugins install @kilocode/shell-security
+openclaw plugins enable shell-security
+openclaw gateway restart
+openclaw plugins uninstall openclaw-security-advisor
+```
+
+Device auth runs fresh on first use of the new plugin. The old plugin
+remains installable from npm (deprecated) but is no longer receiving
+updates.
+
+## [0.1.5] - 2026-04-22
+
+Migration stub. Final release under `@kilocode/openclaw-security-advisor`.
+
+- Replaced the audit flow with a short migration notice directing users to
+  `@kilocode/shell-security`. The `/security-checkup` slash command and
+  the `kilocode_security_advisor` tool both return the notice; no audit
+  runs, no network call, no auth flow.
+- npm package `@kilocode/openclaw-security-advisor` marked deprecated with
+  the same migration message.
+
+## [0.1.4] - 2026-04-20
 
 ### Added
 
@@ -54,5 +99,7 @@ Initial dev release.
 - Audit output validated with a Zod schema at the plugin boundary.
 - Public IP detection via `ifconfig.me` with IPv4/IPv6 validation.
 
-[Unreleased]: https://github.com/Kilo-Org/openclaw-security-advisor/compare/v0.1.0-dev.1...HEAD
-[0.1.0-dev.1]: https://github.com/Kilo-Org/openclaw-security-advisor/releases/tag/v0.1.0-dev.1
+[0.2.0]: https://github.com/Kilo-Org/shell-security/compare/v0.1.5...v0.2.0
+[0.1.5]: https://github.com/Kilo-Org/shell-security/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/Kilo-Org/shell-security/compare/v0.1.0-dev.1...v0.1.4
+[0.1.0-dev.1]: https://github.com/Kilo-Org/shell-security/releases/tag/v0.1.0-dev.1

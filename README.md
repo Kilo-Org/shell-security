@@ -1,11 +1,14 @@
-# @kilocode/openclaw-security-advisor
+# @kilocode/shell-security
+
+> **Renamed from `@kilocode/openclaw-security-advisor`.** If you had the
+> old plugin installed, see the migration steps below.
 
 An [OpenClaw](https://openclaw.ai) plugin that runs a security checkup of
 your OpenClaw instance and returns an expert analysis report from
 KiloCode cloud.
 
 The plugin takes the output of `openclaw security audit`, sends it to
-the KiloCode Security Advisor API for analysis, and returns a detailed
+the KiloCode ShellSecurity API for analysis, and returns a detailed
 markdown report with findings, risks, prioritized recommendations, and
 concrete remediation guidance, displayed directly in your chat.
 
@@ -14,10 +17,23 @@ concrete remediation guidance, displayed directly in your chat.
 ## Install
 
 ```bash
-openclaw plugins install @kilocode/openclaw-security-advisor
-openclaw plugins enable openclaw-security-advisor
+openclaw plugins install @kilocode/shell-security
+openclaw plugins enable shell-security
 openclaw gateway restart
 ```
+
+### Migrating from `@kilocode/openclaw-security-advisor`
+
+```bash
+openclaw plugins install @kilocode/shell-security
+openclaw plugins enable shell-security
+openclaw gateway restart
+openclaw plugins uninstall openclaw-security-advisor
+```
+
+Device auth runs fresh on the new plugin — you'll be prompted to reconnect
+your KiloCode account on first use. Subsequent checkups are identical to
+what you got before the rename.
 
 On first use, the plugin will walk you through a one-time device auth
 flow to connect your KiloCode account.
@@ -32,9 +48,9 @@ The plugin ships on two npm dist-tags:
   stable cuts for early testing. Install with:
 
   ```bash
-  openclaw plugins install @kilocode/openclaw-security-advisor@dev
+  openclaw plugins install @kilocode/shell-security@dev
   # or
-  npm install @kilocode/openclaw-security-advisor@dev
+  npm install @kilocode/shell-security@dev
   ```
 
   Dev releases are real npm publishes with the same provenance
@@ -43,7 +59,7 @@ The plugin ships on two npm dist-tags:
 You can also install an exact version directly:
 
 ```bash
-openclaw plugins install @kilocode/openclaw-security-advisor@0.1.0
+openclaw plugins install @kilocode/shell-security@0.2.0
 ```
 
 ### Staying up to date
@@ -51,14 +67,14 @@ openclaw plugins install @kilocode/openclaw-security-advisor@0.1.0
 New versions ship regularly. To check the latest published stable:
 
 ```bash
-npm view @kilocode/openclaw-security-advisor version
+npm view @kilocode/shell-security version
 ```
 
 Compare that against the `pluginVersion` line at the end of any security
 checkup report. To upgrade:
 
 ```bash
-openclaw plugins install @kilocode/openclaw-security-advisor
+openclaw plugins install @kilocode/shell-security
 openclaw gateway restart
 ```
 
@@ -67,7 +83,7 @@ Your security checkup report will occasionally include an inline
 periodic nudge, not every run. The reminder is appended to the report
 markdown itself, so it appears on both invocation paths (the
 `/security-checkup` slash command and the natural-language
-`kilocode_security_advisor` tool). Security advice improves as the
+`kilocode_shell_security` tool). Security advice improves as the
 plugin ships new audit signals, so staying current is worthwhile.
 
 ---
@@ -94,7 +110,7 @@ this for guaranteed verbatim output.**
 > in Kilo Chat or Slack — those surfaces don't route slash commands to
 > OpenClaw plugins. In Kilo Chat and Slack, use the natural-language
 > invocation below instead; the agent will call the
-> `kilocode_security_advisor` tool directly.
+> `kilocode_shell_security` tool directly.
 
 ### Natural language
 
@@ -106,7 +122,7 @@ You can also just ask the agent:
 
 > Audit my OpenClaw config
 
-The agent will call the `kilocode_security_advisor` tool and the report
+The agent will call the `kilocode_shell_security` tool and the report
 will appear in chat.
 
 **Heads up:** natural language invocation goes through your configured
@@ -153,7 +169,7 @@ is reused automatically.
 
 ## What gets sent
 
-The plugin sends the following to the KiloCode Security Advisor API:
+The plugin sends the following to the KiloCode ShellSecurity API:
 
 - The JSON output of `openclaw security audit` (local config audit
   results, with no secrets, no file contents, just finding IDs and
@@ -177,7 +193,7 @@ HTTPS.
 ## Configuration
 
 The plugin reads its config from `openclaw.json` under
-`plugins.entries.openclaw-security-advisor.config`. In most cases, you
+`plugins.entries.shell-security.config`. In most cases, you
 won't need to set anything. The defaults work out of the box.
 
 | Field        | Default                | Purpose                                                                 |
@@ -188,7 +204,7 @@ won't need to set anything. The defaults work out of the box.
 To override via the OpenClaw CLI:
 
 ```bash
-openclaw config set plugins.entries.openclaw-security-advisor.config.apiBaseUrl https://your-kilocode.example.com
+openclaw config set plugins.entries.shell-security.config.apiBaseUrl https://your-kilocode.example.com
 ```
 
 ### Environment variables
@@ -239,9 +255,9 @@ want the `/plugins list` chat command to show installed plugins.
 
 ## Contributing
 
-- [`AGENTS.md`](https://github.com/Kilo-Org/openclaw-security-advisor/blob/main/AGENTS.md) — build, test, lint, code layout, and contribution rules.
-- [`RELEASING.md`](https://github.com/Kilo-Org/openclaw-security-advisor/blob/main/RELEASING.md) — how to cut a release.
-- [`CHANGELOG.md`](https://github.com/Kilo-Org/openclaw-security-advisor/blob/main/CHANGELOG.md) — release history.
+- [`AGENTS.md`](https://github.com/Kilo-Org/shell-security/blob/main/AGENTS.md) — build, test, lint, code layout, and contribution rules.
+- [`RELEASING.md`](https://github.com/Kilo-Org/shell-security/blob/main/RELEASING.md) — how to cut a release.
+- [`CHANGELOG.md`](https://github.com/Kilo-Org/shell-security/blob/main/CHANGELOG.md) — release history.
 
 ---
 

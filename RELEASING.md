@@ -1,4 +1,4 @@
-# Releasing `@kilocode/openclaw-security-advisor`
+# Releasing `@kilocode/shell-security`
 
 Releases are cut from the `publish` workflow in GitHub Actions. There is no
 local release script, no automated release on push, and no changesets tool.
@@ -17,7 +17,7 @@ refs/heads/main — Changes must be made through a pull request`.
 >    ```bash
 >    git fetch origin --tags
 >    git ls-remote --tags origin "vX.Y.Z"                                 # tag?
->    gh release view "vX.Y.Z" --repo Kilo-Org/openclaw-security-advisor   # release?
+>    gh release view "vX.Y.Z" --repo Kilo-Org/shell-security   # release?
 >    ```
 >
 > 2. **If the tag exists and only the GitHub release is missing** (the
@@ -27,7 +27,7 @@ refs/heads/main — Changes must be made through a pull request`.
 >
 >    ```bash
 >    gh release create vX.Y.Z \
->      --repo Kilo-Org/openclaw-security-advisor \
+>      --repo Kilo-Org/shell-security \
 >      --title vX.Y.Z \
 >      --generate-notes \
 >      --verify-tag
@@ -72,25 +72,25 @@ Before clicking "Run workflow", confirm:
 - [ ] `CHANGELOG.md` has the changes you're about to ship listed under `## [Unreleased]`.
 - [ ] You know which channel you're targeting and which inputs you'll use (see paths below).
 - [ ] The tag for the resulting version does **not** already exist on
-      https://github.com/Kilo-Org/openclaw-security-advisor/releases.
+      https://github.com/Kilo-Org/shell-security/releases.
       The workflow fails fast if it does, but check first — it's cheaper
       to pick a different bump than to recover from a partial publish.
 
 ## Cutting a release
 
-1. Open https://github.com/Kilo-Org/openclaw-security-advisor/actions/workflows/publish.yml
+1. Open https://github.com/Kilo-Org/shell-security/actions/workflows/publish.yml
 2. Click **Run workflow** (top right).
 3. Fill in the inputs — see paths below.
 4. Click **Run workflow**.
 5. Wait for the job to finish (typically 2–3 minutes).
-6. Verify on [npm](https://www.npmjs.com/package/@kilocode/openclaw-security-advisor)
+6. Verify on [npm](https://www.npmjs.com/package/@kilocode/shell-security)
    that the new version shipped with the right dist-tag.
-7. Verify on the [GitHub releases page](https://github.com/Kilo-Org/openclaw-security-advisor/releases)
+7. Verify on the [GitHub releases page](https://github.com/Kilo-Org/shell-security/releases)
    that the tag and release were created.
 
 ### Stable releases (`channel=latest`)
 
-For public releases that go to `npm install @kilocode/openclaw-security-advisor`.
+For public releases that go to `npm install @kilocode/shell-security`.
 
 **Auto-bump (the common path):**
 
@@ -120,7 +120,7 @@ is rarely what you want for `1.0.0`).
 
 For internal dogfood builds. Versions look like `0.1.0-dev.1`,
 `0.1.0-dev.2`, etc. They publish to the `dev` npm dist-tag, so users get
-them with `npm install @kilocode/openclaw-security-advisor@dev`.
+them with `npm install @kilocode/shell-security@dev`.
 
 **Continue current dev cycle (the common path):**
 
@@ -234,7 +234,7 @@ the runner's resolved registry mirror yet.
 1. Wait 1–2 minutes, then verify manually from your machine:
 
    ```bash
-   npm view @kilocode/openclaw-security-advisor@VERSION version
+   npm view @kilocode/shell-security@VERSION version
    ```
 
 2. If the version IS on npm now, the publish was real. Manually create
@@ -259,13 +259,13 @@ but the GitHub releases page doesn't list the new version.
 ```bash
 # For stable releases:
 gh release create vX.Y.Z \
-  --repo Kilo-Org/openclaw-security-advisor \
+  --repo Kilo-Org/shell-security \
   --title "vX.Y.Z" \
   --generate-notes
 
 # For dev releases (note --prerelease):
 gh release create vX.Y.Z-dev.N \
-  --repo Kilo-Org/openclaw-security-advisor \
+  --repo Kilo-Org/shell-security \
   --title "vX.Y.Z-dev.N" \
   --generate-notes \
   --prerelease
@@ -323,7 +323,7 @@ Recovery steps:
 
    ```bash
    gh release create v1.2.4 \
-     --repo Kilo-Org/openclaw-security-advisor \
+     --repo Kilo-Org/shell-security \
      --title "v1.2.4" \
      --generate-notes
    # Add --prerelease for dev releases.
@@ -375,7 +375,7 @@ The explicit version is required because auto-bump from a fresh repo
 (no prior tags) would resolve to `0.0.1-dev.1`, which doesn't match the
 intended starting point.
 
-This publishes `@kilocode/openclaw-security-advisor@0.1.0-dev.1` to the
+This publishes `@kilocode/shell-security@0.1.0-dev.1` to the
 `dev` dist-tag, creates the `v0.1.0-dev.1` tag (pointing at an orphan
 commit), and creates a prerelease GitHub release. `main` history is
 untouched.
@@ -409,12 +409,12 @@ While the package is pre-stable, end users **must** install the dev
 channel explicitly:
 
 ```bash
-openclaw plugins install @kilocode/openclaw-security-advisor@dev
+openclaw plugins install @kilocode/shell-security@dev
 # or
-npm install @kilocode/openclaw-security-advisor@dev
+npm install @kilocode/shell-security@dev
 ```
 
-Plain `openclaw plugins install @kilocode/openclaw-security-advisor`
+Plain `openclaw plugins install @kilocode/shell-security`
 (no `@dev`) will resolve to whatever `latest` currently points at, and
 since `latest` currently points at a prerelease, OpenClaw's prerelease
 guard will refuse the install with a confusing error. See
