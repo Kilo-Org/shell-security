@@ -1,6 +1,38 @@
 {
   "id": "openclaw-security-advisor",
-  "name": "OpenClaw Security Advisor (deprecated)",
-  "description": "DEPRECATED: this plugin has been renamed to @kilocode/shell-security. Install the new plugin with `openclaw plugins install @kilocode/shell-security` to continue receiving security checkups.",
-  "commandAliases": [{ "name": "security-checkup", "kind": "runtime-slash" }]
+  "name": "OpenClaw Security Advisor",
+  "description": "Run a security checkup of your OpenClaw instance and get an expert analysis report from KiloCode.",
+  "commandAliases": [{ "name": "security-checkup", "kind": "runtime-slash" }],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "$defs": {
+      "secretRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["env", "file", "exec"]
+          },
+          "provider": { "type": "string" },
+          "id": { "type": "string" }
+        },
+        "required": ["source", "provider", "id"]
+      }
+    },
+    "properties": {
+      "authToken": {
+        "description": "KiloCode auth token. Accepts either a plain string or a SecretRef pointing at an env, file, or exec provider. The plugin writes a SecretRef automatically on first use via device auth; advanced users can replace it with a plain string or a different provider reference.",
+        "anyOf": [
+          { "type": "string", "minLength": 1 },
+          { "$ref": "#/$defs/secretRef" }
+        ]
+      },
+      "apiBaseUrl": {
+        "type": "string",
+        "description": "KiloCode API base URL. Defaults to https://api.kilo.ai. Override for dev or self-hosted environments."
+      }
+    }
+  }
 }

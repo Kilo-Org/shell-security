@@ -7,35 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.5] - Migration stub
-
-This release is a migration stub. The plugin has been renamed to `@kilocode/shell-security`. Installing or invoking `@kilocode/openclaw-security-advisor@0.1.5` no longer runs a security checkup. Both the `/security-checkup` slash command and the `kilocode_security_advisor` tool return a notice explaining how to install the new package.
-
-### Changed
-
-- `index.ts` rewritten as a two-entry-point stub that returns the migration notice. The previous audit flow, auth flow, platform detection, client, and token-store modules are removed from this release (via `git rm` so the commit can be cleanly reverted on the renamed repo).
-- `openclaw.plugin.json` description and name reflect the deprecation; config schema removed (stub requires no config).
-- `README.md` replaced with a migration page.
-
-### Removed
-
-- `src/audit.ts`, `src/client.ts`, `src/platform.ts`, `src/auth/device-auth.ts`, `src/auth/token-store.ts`.
-- Tests that exercised the removed modules (`audit`, `device-auth`, `token-store`, `platform`).
-
-### Migration path for existing users
-
-1. `openclaw plugins install @kilocode/shell-security`
-2. `openclaw plugins enable shell-security`
-3. `openclaw gateway restart`
-4. `openclaw plugins uninstall openclaw-security-advisor`
-5. Run `/security-checkup` and complete device auth once on the new plugin.
-
-The new plugin's runtime behavior is identical to 0.1.4 (including the `source.channel` forwarding added in 0.1.4). The rename is strictly a name change — no feature regressions.
-
-Published with provenance attestation via npm OIDC trusted publishing; verify with `npm audit signatures`.
-
-## [0.1.4] - 2026-04-21
-
 ### Added
 
 - Plugin now forwards the active chat surface to the server as `source.channel` on every checkup request. The slash-command path reads `PluginCommandContext.channel` and the tool/natural-language path reads `OpenClawPluginToolContext.messageChannel` (tool registration converted to factory form so the ctx is accessible at tool-instantiation and closed over by `execute()`). Server uses this hint to pick a channel-appropriate format (e.g. collapsible `<details>` blocks on capable UIs, flat markdown on Telegram/Slack). Backward-compatible with older servers: the field is optional in the client payload and servers that don't declare it in their zod schema silently drop it at parse time (no coordinated release required).
