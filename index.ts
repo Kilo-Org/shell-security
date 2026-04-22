@@ -19,6 +19,16 @@ import pkg from "./package.json" with { type: "json" };
 const PLUGIN_VERSION: string = pkg.version;
 const DEFAULT_API_BASE = "https://api.kilo.ai";
 
+// OpenClaw invokes a plugin's `register(api)` once per distinct
+// `loadOpenClawPlugins` cacheKey (gateway startup, provider discovery,
+// metadata registry, web-fetch/web-search runtimes, etc.), so in a
+// single process `register` typically runs ~15 times. Without this
+// guard the three "Registered …" info lines below fire every time,
+// which produced the 44-line log spam observed in KiloClaw boots.
+// Module scope survives across all register() calls in the same
+// process, so we log once and stay quiet after that.
+let registrationLogged = false;
+
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
 };
@@ -470,8 +480,11 @@ export default definePluginEntry({
       handler: runSlashCommand,
     });
 
-    api.logger.info?.("Registered tool: kilocode_shell_security");
-    api.logger.info?.("Registered command: /shell-security");
-    api.logger.info?.("Registered command: /security-checkup (legacy alias)");
+    if (!registrationLogged) {
+      api.logger.info?.("Registered tool: kilocode_shell_security");
+      api.logger.info?.("Registered command: /shell-security");
+      api.logger.info?.("Registered command: /security-checkup (legacy alias)");
+      registrationLogged = true;
+    }
   },
 });
