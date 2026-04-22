@@ -27,6 +27,12 @@ const DEFAULT_API_BASE = "https://api.kilo.ai";
 // which produced the 44-line log spam observed in KiloClaw boots.
 // Module scope survives across all register() calls in the same
 // process, so we log once and stay quiet after that.
+//
+// Scope note: this guard covers logging only. Re-invoking
+// `api.registerTool(...)` and `api.registerCommand(...)` on every
+// register() call is intentional — each `loadOpenClawPlugins` pass
+// builds its own registry, and the plugin must register into every
+// one to be visible in that context.
 let registrationLogged = false;
 
 type ToolResult = {
