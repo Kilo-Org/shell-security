@@ -1,6 +1,6 @@
 {
   "name": "@kilocode/shell-security",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "description": "Security analysis plugin for OpenClaw instances, powered by KiloCode",
