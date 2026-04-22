@@ -361,6 +361,70 @@ yours blocks them, allowlist `github-actions[bot]` for tag operations too.
 See [AGENTS.md](./AGENTS.md#branch-protection-and-the-release-commit) for the
 longer-term plan to replace the bot bypass with a dedicated GitHub App.
 
+## First publish of a newly-named npm package (OIDC bootstrap)
+
+**When this applies:** the very first publish of a package slug that
+doesn't exist on npm yet. Happens once at package creation, and again
+if the package is ever renamed (as when `@kilocode/openclaw-security-advisor`
+became `@kilocode/shell-security`).
+
+**The chicken-and-egg:** npm trusted publishers (OIDC) can only be
+configured on a package that already exists on the registry. Until the
+package slug exists, there's nothing to attach trust to. So the very
+first publish **must** use a classic npm token, not OIDC. The workflow's
+OIDC-based publish step will fail with `401 Unauthorized` or similar.
+
+### One-time manual bootstrap
+
+1. **Get an npm classic automation token** with publish permission for
+   the `@kilocode` scope (npmjs.com → avatar → Access Tokens →
+   Generate New Token → "Automation" or "Publish").
+2. **Publish locally** from a clean checkout of the main branch:
+
+   ```bash
+   git checkout main && git pull
+   # Edit package.json: remove "private": true AND set "version" to the
+   # target, e.g. "0.2.0". Do NOT commit this — it's just for the local
+   # publish.
+   NPM_CONFIG_PROVENANCE=false npm publish --tag latest --access public \
+     --//registry.npmjs.org/:_authToken=$YOUR_CLASSIC_TOKEN
+   # Restore private: true and version locally; discard the edit.
+   ```
+
+   Provenance must be off on this step — provenance attestation requires
+   OIDC, which is exactly what we don't have yet.
+
+3. **Verify on npm:** `npm view @kilocode/shell-security version` should
+   return the version you just published.
+4. **Create the git tag and GitHub release by hand** so future
+   `script/version.ts` runs see it:
+
+   ```bash
+   git tag v0.2.0 -m "Release v0.2.0"
+   git push origin v0.2.0
+   gh release create v0.2.0 --title v0.2.0 --generate-notes --verify-tag
+   ```
+
+### Configure OIDC Trusted Publishers (one-time)
+
+Once the package slug exists:
+
+1. On npmjs.com, navigate to the package settings → **Trusted Publishers**.
+2. Add a GitHub Actions publisher:
+   - Repository owner: `Kilo-Org`
+   - Repository name: `shell-security`
+   - Workflow file: `publish.yml`
+   - Environment: _(leave blank)_
+3. Save.
+
+### Subsequent publishes go through the workflow
+
+From the second release onward, the normal `workflow_dispatch` flow in
+this document applies — the workflow authenticates to npm via OIDC,
+publishes with provenance, and handles git/GitHub-release side effects.
+
+---
+
 ## First-time releases (2026-04-15)
 
 Today's first cut is to the `dev` channel.

@@ -108,9 +108,12 @@ Until then, release commits:
 
 ## Code layout
 
-- `index.ts` — plugin entry point; registers `/security-checkup` command and
-  `kilocode_shell_security` tool; shared `runShellSecurityFlow` handles
-  all auth paths (env token, saved token, pending device auth, new device auth).
+- `index.ts` — plugin entry point; registers the `kilocode_shell_security`
+  tool and two slash commands (`/shell-security` canonical, `/security-checkup`
+  legacy alias for users migrating from `@kilocode/openclaw-security-advisor`).
+  Both slash commands route to the same handler. Shared `runShellSecurityFlow`
+  handles all auth paths (env token, saved token, pending device auth, new
+  device auth).
 - `src/audit.ts` — runs `openclaw security audit --json`, parses + validates
   output, fetches public IP.
 - `src/client.ts` — HTTP client for the ShellSecurity API; throws
