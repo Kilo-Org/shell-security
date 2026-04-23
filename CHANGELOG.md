@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- CI `install-preflight` workflow that packs this plugin into its
+  real publish shape (`bun pm pack`) and runs it through
+  `openclaw plugins install <tarball>` against the current
+  `openclaw@latest` from npm. Exercises the same install path an
+  end user hits, including the real scanner and dependency denylist
+  — no regex reimplementation and no force/bypass flags. Drift
+  against upstream rule changes surfaces on the next PR automatically.
+  Runs on push to `main`, pull requests, and manual dispatch.
+  Locally reproducible via `bun run install-preflight`.
+
 ### Changed
 
 - Extracted `resolveEnvToken()` and `resolveApiBase()` out of

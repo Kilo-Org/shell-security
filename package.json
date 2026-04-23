@@ -34,6 +34,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"**/*.{ts,json,md,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,json,md,yml}\"",
+    "install-preflight": "bun run script/install-preflight.ts",
     "scan": "bun run script/scan.ts",
     "test": "bun test"
   },

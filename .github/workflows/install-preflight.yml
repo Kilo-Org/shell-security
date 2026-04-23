@@ -1,0 +1,52 @@
+name: install-preflight
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref. Keeps resource use linear
+# with the number of open PRs, not the number of pushes per PR.
+concurrency:
+  group: install-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install-preflight:
+    # Security: the job installs ~450 npm packages (~54 MB across 7,500
+    # files) and takes a few minutes per run. On a public repo that
+    # makes it an attractive DoS vector via fork PRs. Skip the job
+    # when the PR originates from a fork — a maintainer can instead
+    # run `bun run install-preflight` locally against the fork's code
+    # (or merge into a same-repo branch) to exercise the real check.
+    # Same-repo branches and direct pushes are unaffected.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    # Hard wall-time cap so a hung npm install or stuck openclaw CLI
+    # can't sit on a runner. Normal runs finish in ~1–2 minutes.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dev dependencies
+        run: bun install --frozen-lockfile
+
+      # Packs this plugin, installs openclaw@latest in a throwaway
+      # dir, and runs `openclaw plugins install <tarball>` — the same
+      # real path end users hit. Exits non-zero on any scanner /
+      # denylist rejection. Never add bypass flags (--dangerously-
+      # force-unsafe-install, --force, etc.) here or in the script; a
+      # rejection means the plugin source needs fixing, not the check.
+      - name: OpenClaw install preflight
+        run: bun run install-preflight
