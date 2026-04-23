@@ -35,6 +35,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pin Node 24 (current LTS) because openclaw@latest requires Node
+      # >=22.14 — GitHub's ubuntu-latest runners still ship Node 20 by
+      # default, so without this step the openclaw CLI refuses to run
+      # ("Node.js v22.12+ is required"). Node 24 also matches the
+      # wider KiloCode ecosystem engines field and covers any near-term
+      # openclaw bumps. bun has its own runtime and is independent.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
