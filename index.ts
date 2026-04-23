@@ -21,8 +21,8 @@ const DEFAULT_API_BASE = "https://api.kilo.ai";
 
 // OpenClaw invokes a plugin's `register(api)` once per distinct
 // `loadOpenClawPlugins` cacheKey (gateway startup, provider discovery,
-// metadata registry, web-fetch/web-search runtimes, etc.), so in a
-// single process `register` typically runs ~15 times. Without this
+// metadata registry, web-retrieval / web-search runtimes, etc.), so in
+// a single process `register` typically runs ~15 times. Without this
 // guard the three "Registered …" info lines below fire every time,
 // which produced the 44-line log spam observed in KiloClaw boots.
 // Module scope survives across all register() calls in the same
