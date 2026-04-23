@@ -1,6 +1,7 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { AuthExpiredError, submitAudit } from "./src/client.js";
 import { runAudit, getPublicIp } from "./src/audit.js";
+import { resolveEnvToken, resolveApiBase } from "./src/env.js";
 import { detectPlatform } from "./src/platform.js";
 import { startDeviceAuth, pollDeviceAuth } from "./src/auth/device-auth.js";
 import {
@@ -17,12 +18,11 @@ import {
 import pkg from "./package.json" with { type: "json" };
 
 const PLUGIN_VERSION: string = pkg.version;
-const DEFAULT_API_BASE = "https://api.kilo.ai";
 
 // OpenClaw invokes a plugin's `register(api)` once per distinct
 // `loadOpenClawPlugins` cacheKey (gateway startup, provider discovery,
-// metadata registry, web-fetch/web-search runtimes, etc.), so in a
-// single process `register` typically runs ~15 times. Without this
+// metadata registry, web-retrieval / web-search runtimes, etc.), so in
+// a single process `register` typically runs ~15 times. Without this
 // guard the three "Registered …" info lines below fire every time,
 // which produced the 44-line log spam observed in KiloClaw boots.
 // Module scope survives across all register() calls in the same
@@ -110,25 +110,6 @@ function normalizeChannel(raw: string | undefined): string | undefined {
   if (typeof raw !== "string") return undefined;
   const trimmed = raw.trim();
   return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function resolveEnvToken(): string | null {
-  return process.env.KILOCODE_API_KEY ?? process.env.KILO_API_KEY ?? null;
-}
-
-function resolveApiBase(pluginConfig: Record<string, unknown> | null): string {
-  const configUrl = pluginConfig?.apiBaseUrl;
-  if (typeof configUrl === "string" && configUrl.length > 0) return configUrl;
-  if (process.env.KILO_API_URL) return process.env.KILO_API_URL;
-  const gatewayUrl = process.env.KILOCODE_API_BASE_URL;
-  if (gatewayUrl) {
-    try {
-      return new URL(gatewayUrl).origin;
-    } catch {
-      /* fall through */
-    }
-  }
-  return DEFAULT_API_BASE;
 }
 
 function toolResult(content: string): ToolResult {
