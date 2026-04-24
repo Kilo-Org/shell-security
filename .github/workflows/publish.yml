@@ -34,9 +34,16 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.channel }}-${{ 
 # id-token:write is required for npm provenance (SLSA attestation).
 # This workflow must run on GitHub-hosted runners (not Blacksmith) for
 # provenance to work — GitHub's OIDC token is only issued on their infra.
+#
+# contents: read is sufficient. Post-publish pushes to `main` are
+# authenticated by the kilo-maintainer App token (minted by the
+# setup-git-committer composite action), not by GITHUB_TOKEN. If a
+# future edit accidentally introduces a git/gh call that falls back
+# to GITHUB_TOKEN for a write, we want it to fail loudly here rather
+# than silently succeed with broader privilege.
 permissions:
   id-token: write
-  contents: write
+  contents: read
 
 jobs:
   publish:

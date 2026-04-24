@@ -36,6 +36,13 @@ runs:
         app-id: ${{ inputs['kilo-maintainer-app-id'] }}
         private-key: ${{ inputs['kilo-maintainer-app-secret'] }}
         owner: ${{ github.repository_owner }}
+        # Scope the minted installation token to the current repo
+        # only, even when the kilo-maintainer App is installed on
+        # multiple repos in the org. Without this, the token would
+        # carry the App's full installation scope (e.g. both
+        # shell-security and kilocode) and a compromised workflow
+        # could push to unrelated repos.
+        repositories: ${{ github.event.repository.name }}
 
     - name: Configure git user
       shell: bash
